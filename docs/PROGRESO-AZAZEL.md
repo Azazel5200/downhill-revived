@@ -29,6 +29,8 @@ Los porcentajes corresponden al README del repositorio original revisado el
 |---|---|---|
 | Auditoría de repositorios y licencias | Hecha | Código fuente y avisos de terceros inspeccionados |
 | Plan técnico ARM64, Windows 8.1 y Vita | Hecho | Documento `docs/AZAZEL-PORTABILITY.md` |
+| Requisito de juego en español | Documentado | La edición europea tiene español; el núcleo estadounidense actual no lo ofrece |
+| Traducción de menús, opciones y textos del juego | Pendiente | No existe implementación ni prueba propia de localización |
 | Prueba independiente C11 sin datos del juego | Hecha | Compiló en Linux x64; geometría 3D por CPU y pruebas unitarias |
 | Verificadores de documentación upstream | Hecha | `python3 tools/check.py docs` pasó en el clon de auditoría |
 | Compilación completa de Downhill Revived en nuestros equipos | Pendiente | Requiere preparar toolchain y copia local del juego |
@@ -49,6 +51,9 @@ gráfico de las plataformas. No equivale a una versión jugable.
    tablet con Celeron N2805 antes de escoger backend.
 4. Integrar paulatinamente la lógica y los recursos locales del usuario,
    verificando menús, carrera, físicas, IA y audio frente a la referencia.
+5. **ES0:** identificar las cadenas, fuentes y recursos gráficos que se deben
+   traducir; decidir entre localización del núcleo USA y soporte europeo
+   después de medir el alcance de ambas opciones.
 
 ## 4. Objetivos de rendimiento (NO resultados)
 
