@@ -27,6 +27,43 @@ progresión mientras se desarrollan versiones nativas para:
 No confundir compilación, lanzamiento de una ventana, ejecución de menús y
 jugabilidad completa; son hitos distintos.
 
+## Idioma del juego: español (requisito del jugador)
+
+El usuario quiere **jugar en español**: menús, opciones, mensajes, pantallas de
+carga y textos durante el juego. La documentación de upstream
+(`docs/findings/100-other-releases.md`) confirma que la edición europea
+`SLES-52202` incluye español entre cinco idiomas; sus bancos de voces son
+idénticos a los estadounidenses y por tanto **las voces siguen en inglés**.
+
+La versión actual de Downhill Revived solamente acepta la edición
+estadounidense `SCUS-97177`. No afirmar que el fork ya está traducido ni que
+la ISO europea funciona. Hay dos rutas de investigación, aún sin elegir:
+
+1. **Localización sobre el núcleo estadounidense:** mapear de forma verificable
+   las cadenas y los recursos visibles, evaluar un mecanismo de sustitución
+   compatible con el sistema de textos y las fuentes, sin alterar físicas o
+   progreso. No asumir que cambiar cadenas por sí solo cubre los recursos.
+2. **Núcleo europeo:** adaptar la edición `SLES-52202`, conservando sus tablas
+   de cinco idiomas, fuentes, menús y recursos. Upstream estima 180–290 horas
+   para el soporte regional: es una estimación de investigación, no una tarea
+   completada ni un plazo prometido.
+
+**Pruebas de idioma pendientes:**
+
+- [ ] `ES0` — Inventariar en el código y recursos locales los textos, fuentes
+  y elementos gráficos que requieren localización, sin publicar datos del juego.
+- [ ] `ES1` — Probar el método elegido en menú principal, configuración,
+  selección de piloto/bicicleta, HUD y pantallas de carga.
+- [ ] `ES2` — Verificar tildes, `ñ`, caracteres especiales, ancho de texto y
+  legibilidad a 960×544, 720p y resoluciones de escritorio.
+- [ ] `ES3` — Verificar que la traducción no modifica física, IA, partidas ni
+  lógica temporal; comprobar persistencia del idioma elegido.
+
+Por defecto, la preferencia del port será español, con opción para restaurar
+el idioma original cuando se implemente. Los recursos originales serán
+aportados localmente por el usuario; no subir texto extraído, videos,
+fuentes comerciales ni otros datos protegidos al fork.
+
 ## Arquitectura que debemos conservar
 
 1. `port/tools/build_wasm.py`: transforma la lógica original en el módulo
