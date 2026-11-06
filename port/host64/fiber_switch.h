@@ -1,7 +1,7 @@
 /* The one part of the EE fibers (fiber.c) that differs per CPU and ABI: the register switch and
    a new fiber's first frame. build_host64.py's target table links one adapter: fiber_win64.c
-   (Windows x64), fiber_sysv64.c (x86-64 System V: Linux), fiber_arm64.c (AAPCS64: Android,
-   Linux, macOS). */
+   (Windows x64), fiber_winarm64.c (experimental Windows ARM64), fiber_sysv64.c (x86-64 System V:
+   Linux), fiber_arm64.c (AAPCS64: Android, macOS). */
 #ifndef DHD_HOST64_FIBER_SWITCH_H
 #define DHD_HOST64_FIBER_SWITCH_H
 #include <stdint.h>

@@ -6,6 +6,7 @@
     python3 port/tools/build_host64.py --target macos-arm64 MODULE               # a Mac: dhd64 (Mach-O)
     python port/tools/build_host64.py --target android-arm64 MODULE --jobs 2     # libmain.so (finding 091)
     python port/tools/build_host64.py [--target T] --fiber-test                  # the EE fibers alone
+    python port/tools/build_host64.py --target win-arm64 --fiber-test             # ARM64 smoke ONLY
 
 MODULE is a .wasm or WABT .c units (module name must be core; a Mac without wasm2c takes the C that
 wasm2c wrote elsewhere, with --wabt naming a folder that holds WABT's include/ and share/). --fake
@@ -20,8 +21,8 @@ Rust one everywhere: port/gs/gpu_rust.c over the dhd_render library (port/render
 port/tools/rustgs.py, release profile; wgpu on DX12 or Vulkan, Metal, Vulkan), with dhd_net, and
 the libraries rustc lists for it (--print native-static-libs, checked by rustgs). What differs per
 target is in TARGETS: the compiler and its flags, the linker, SDL3's build, the Rust triple, the
-output and the fibers' register switch (fiber.c is shared; fiber_win64.c, fiber_sysv64.c or
-fiber_arm64.c per CPU and ABI). Bounds are checked by guard pages on every target (guest_memory.c reserves 8 GiB: every
+   output and the fibers' register switch (fiber.c is shared; fiber_win64.c, fiber_winarm64.c,
+   fiber_sysv64.c or fiber_arm64.c per CPU and ABI). Bounds are checked by guard pages on every target (guest_memory.c reserves 8 GiB: every
 wasm32 address plus offset), and WABT's call-depth counter is a plain global (the module runs on one
 OS thread), as dhd64.exe has them since finding 082 W7e.
 
@@ -72,7 +73,7 @@ class Target:
         self.key, self.rust, self.out, self.exe, self.jobs, self.outputs = key, rust, out, exe, jobs, outputs
         self.fiber = fiber  # the fiber switch's adapter, port/host64/fiber_<fiber>.c (the CPU and its ABI)
         self.flags, self.wabt, self.simde = list(flags), Path(os.environ.get('WABT_DIR') or wabt), simde
-        self.windows, self.android, self.mac = key == 'win-x64', key == 'android-arm64', key == 'macos-arm64'
+        self.windows, self.android, self.mac = key.startswith('win-'), key == 'android-arm64', key == 'macos-arm64'
         self.posix = not self.windows
 
 
@@ -80,6 +81,8 @@ MAC_MIN = '11.0'  # the first macOS on Apple silicon (package_release.py's LSMin
 ANDROID_API = 30  # sdl3.ANDROID_API: Android 11
 TARGETS = {t.key: t for t in (
     Target('win-x64', 'x86_64-pc-windows-msvc', 'build/host64-exe', 'dhd64.exe', 'win64'),
+    # Only --fiber-test is implemented: SDL3, Rust and the game executable still target win-x64.
+    Target('win-arm64', 'aarch64-pc-windows-msvc', 'build/host64-winarm64', 'dhd64.exe', 'winarm64'),
     Target('linux-x64', 'x86_64-unknown-linux-gnu', 'build/host64-linux', 'dhd64', 'sysv64',
            flags=['-march=x86-64-v2', '-fPIC'], wabt='/opt/wabt', simde='/opt/simde-src'),
     # M1 is every Apple silicon Mac's floor
@@ -118,6 +121,69 @@ def glue(t):
                                  'launcher.c')]
 
 
+def windows_developer_paths(env, arch):
+    """Select actual MSVC/SDK libraries for the requested Windows architecture."""
+    # os.environ is case-insensitive on Windows, but dict(os.environ, ...) is
+    # case-sensitive and its environment keys may already be uppercased.
+    env_ci = {key.casefold(): value for key, value in env.items()}
+    needed = ('VCToolsInstallDir', 'WindowsSdkDir', 'WindowsSDKVersion')
+    missing = [name for name in needed if not env_ci.get(name.casefold())]
+    if missing:
+        raise RuntimeError('Windows %s fiber smoke requires a %s VS developer shell: ' %
+                           (arch, arch) +
+                           'missing ' + ', '.join(missing))
+    msvc, sdk = Path(env_ci['vctoolsinstalldir']), Path(env_ci['windowssdkdir'])
+    version = env_ci['windowssdkversion'].strip('\\/')
+    paths = [msvc/'include', msvc/'lib'/arch,
+             *[sdk/'Include'/version/x for x in ('ucrt', 'um', 'shared')],
+             sdk/'Lib'/version/'ucrt'/arch, sdk/'Lib'/version/'um'/arch]
+    missing = [str(path) for path in paths if not path.is_dir()]
+    if missing:
+        raise RuntimeError('Windows %s fiber smoke: missing %s compiler/SDK paths:\n' %
+                           (arch, arch) +
+                           '\n'.join(missing))
+    return msvc, sdk, version
+
+
+def windows_arm64_paths(env):
+    """Keep the native ARM64 preflight contract explicit: x64 libraries never qualify."""
+    return windows_developer_paths(env, 'arm64')
+
+
+def windows_fiber_command(t, a, wabt, out, exe, sources, flags, env):
+    """Build one fiber selftest. Keep the proven win-x64 command unchanged."""
+    if t.key == 'win-arm64':
+        msvc, sdk, version = windows_arm64_paths(env)
+        clang, linker = a.llvm/'clang-cl.exe', a.llvm/'lld-link.exe'
+        missing = [str(path) for path in (clang, linker) if not path.is_file()]
+        if missing:
+            raise RuntimeError('Windows ARM64 fiber smoke: missing LLVM tools (pass --llvm BIN_DIR): '
+                               + ', '.join(missing))
+        headers = ['/imsvc'+str(msvc/'include'),
+                   *['/imsvc'+str(sdk/'Include'/version/x) for x in ('ucrt','um','shared')]]
+        libs = ['/libpath:'+str(msvc/'lib/arm64'),
+                '/libpath:'+str(sdk/'Lib'/version/'ucrt/arm64'),
+                '/libpath:'+str(sdk/'Lib'/version/'um/arm64')]
+        # RtlCaptureStackBackTrace on Windows ARM64 uses the x29 frame chain.
+        # Keep it even under /O2; otherwise a switched fiber yields one frame.
+        return [clang, '--target='+t.rust, '-fuse-ld=lld',
+                '/nologo', '/O2', '-fno-omit-frame-pointer', '/MT', *flags,
+                *headers, *sources, '/Fe'+str(exe), '/Fo'+str(out)+os.sep, '/link',
+                *libs, 'onecore.lib', '/subsystem:console']
+    # Existing win-x64 local command stays as-is unless a developer shell explicitly
+    # identifies a different VS/SDK version (e.g. a disposable GitHub x64 runner).
+    env_ci = {key.casefold(): value for key, value in env.items()}
+    if any(env_ci.get(k.casefold()) for k in ('VCToolsInstallDir','WindowsSdkDir','WindowsSDKVersion')):
+        msvc, sdk, version = windows_developer_paths(env, 'x64')
+    else:
+        msvc, sdk, version = MSVC, SDK, VERSION
+    return [a.llvm/'clang-cl.exe', '--target=x86_64-pc-windows-msvc', '/nologo', '/O2', '/MT', *flags,
+            '/imsvc'+str(msvc/'include'), *['/imsvc'+str(sdk/'Include'/version/x) for x in ('ucrt','um','shared')],
+            *sources, '/Fe'+str(exe), '/Fo'+str(out)+os.sep, '/link', '/libpath:'+str(msvc/'lib/x64'),
+            '/libpath:'+str(sdk/'Lib'/version/'ucrt/x64'), '/libpath:'+str(sdk/'Lib'/version/'um/x64'),
+            'onecore.lib', '/subsystem:console']
+
+
 def fiber_test(t, a, cc, wabt, out, env):
     """--fiber-test: port/host64/selftest_fiber.c with the target's compiler, guest memory and fiber
     adapter (glue's first five units). Run here with its two guard-fault children (android-arm64:
@@ -127,11 +193,9 @@ def fiber_test(t, a, cc, wabt, out, env):
     flags = ['-DWASM_RT_STACK_DEPTH_COUNT=1', '-I'+str(wabt/'include'), '-I'+str(SOURCE)]
     exe = out/('selftest_fiber.exe' if t.windows else 'selftest_fiber')
     if t.windows:
-        cmd = [a.llvm/'clang-cl.exe', '--target=x86_64-pc-windows-msvc', '/nologo', '/O2', '/MT', *flags,
-               '/imsvc'+str(MSVC/'include'), *['/imsvc'+str(SDK/'Include'/VERSION/x) for x in ('ucrt','um','shared')],
-               *sources, '/Fe'+str(exe), '/Fo'+str(out)+os.sep, '/link', '/libpath:'+str(MSVC/'lib/x64'),
-               '/libpath:'+str(SDK/'Lib'/VERSION/'ucrt/x64'), '/libpath:'+str(SDK/'Lib'/VERSION/'um/x64'),
-               'onecore.lib', '/subsystem:console']
+        if t.key == 'win-arm64' and not (wabt/'include/wasm-rt.h').is_file():
+            raise RuntimeError('Windows ARM64 fiber smoke needs WABT wasm-rt.h: pass --wabt WABT_DIR')
+        cmd = windows_fiber_command(t, a, wabt, out, exe, sources, flags, env)
     else:
         cmd = [cc, *t.flags, '-O2', '-pthread', *flags, *sources, '-o', exe] + (['-rdynamic'] if not t.mac else [])
     r = subprocess.run(list(map(str, cmd)), cwd=out, env=env, capture_output=True, text=True, timeout=300)
@@ -140,10 +204,21 @@ def fiber_test(t, a, cc, wabt, out, env):
     if t.android:
         print('PASS: built %s (run it on a device: adb push, then --guest-guard and --native-guard)' % exe)
         return 0
+    if t.key == 'win-arm64':
+        for flag in ('--exit-probe', '--trace-exit-probe'):
+            probe = subprocess.run([str(exe), flag], cwd=out, env=env,
+                                   capture_output=True, text=True, timeout=30)
+            code = probe.returncode & 0xffffffff
+            print('ARM64 %s CRT exit probe: %#x (expected 0x3)' % (flag, code))
+            if code != 3:
+                raise RuntimeError('ARM64 %s exit probe failed (%#x):\n%s%s' %
+                                   (flag, code, probe.stdout, probe.stderr))
     r = subprocess.run([str(exe)], cwd=out, env=env, capture_output=True, text=True, timeout=60)
     print(r.stdout + r.stderr, end='')
-    if r.returncode or 'PASS' not in r.stdout:
-        raise RuntimeError('selftest_fiber failed (%d)' % r.returncode)
+    main_code = r.returncode  # guard-child runs below reuse `r`
+    main_failed = bool(main_code or 'PASS' not in r.stdout)
+    if main_failed and t.key != 'win-arm64':
+        raise RuntimeError('selftest_fiber failed (%d)' % main_code)
     for flag, report in (('--guest-guard', 'uncommitted guest address 0x006000000'),
                          ('--native-guard', 'native stack: 8 MiB less 64 KiB written')):
         r = subprocess.run([str(exe), flag], cwd=out, env=env, capture_output=True, text=True, timeout=60)
@@ -152,6 +227,10 @@ def fiber_test(t, a, cc, wabt, out, env):
         if not faulted or report not in r.stderr:
             raise RuntimeError('selftest_fiber %s: expected a fault after %r, got %#x:\n%s' % (flag, report, code, r.stderr))
         print('PASS: %s faults (%#x)' % (flag, code))
+    if main_failed:
+        # Preserve the failing result, but still report the independent guard
+        # checks on ARM64 so hosted diagnostics need fewer full VM launches.
+        raise RuntimeError('selftest_fiber failed (%d); guard checks completed' % main_code)
     return 0
 
 
@@ -250,6 +329,11 @@ def main():
                      help='optimize with this profile (llvm-profdata merge of the .profraw files)')
     a = p.parse_args()
     t = TARGETS[a.target]
+    if t.key == 'win-arm64':
+        if not a.fiber_test or a.fake or a.module:
+            p.error('win-arm64 is an experimental --fiber-test only; full game/SDL3/Rust builds are not implemented')
+        if os.name != 'nt':
+            p.error('win-arm64 --fiber-test must run on Windows with ARM64 MSVC and Windows SDK libraries')
     if not a.fiber_test and not a.fake and not a.module:
         # no module named: build_wasm.py's output (port/tools/build.py builds both in order)
         default = ROOT / 'build' / 'wasm' / 'dhd_core.wasm'
@@ -267,7 +351,14 @@ def main():
     wabt = (a.wabt or t.wabt).resolve()
     simde = a.simde or Path(os.environ.get('SIMDE_DIR') or t.simde or str(DEVCACHES / 'simde-src'))
     out = (a.out or ROOT / t.out).resolve()
-    if out.drive.upper() == 'C:' or str(out).startswith('/mnt/c/'):
+    # GitHub-hosted Windows runners have an ephemeral C: workspace. Only the
+    # ARM64 fiber CI smoke test may opt into that runner-local exception;
+    # ordinary builds (including the user's laptop) still reject C:.
+    hosted_ci_fiber = (a.fiber_test and t.windows
+                       and os.environ.get('GITHUB_ACTIONS') == 'true'
+                       and os.environ.get('RUNNER_ENVIRONMENT') == 'github-hosted'
+                       and os.environ.get('DHD_CI_ALLOW_C_OUTPUT') == '1')
+    if (out.drive.upper() == 'C:' or str(out).startswith('/mnt/c/')) and not hosted_ci_fiber:
         p.error('build output must stay off C:')
     work = out / 'work' if t.android else out  # Android: out holds the APK's libraries only
     scratch = work / 'tmp'
@@ -295,7 +386,12 @@ def main():
     elif t.posix:
         ndk, tools, cc, ar = None, None, 'clang', 'ar'
     if a.fiber_test:
-        return fiber_test(t, a, None if t.windows else cc, wabt, work, env)
+        try:
+            if t.key == 'win-arm64':
+                env['PATH'] = str(a.llvm.resolve()) + os.pathsep + env.get('PATH', '')
+            return fiber_test(t, a, None if t.windows else cc, wabt, work, env)
+        except RuntimeError as error:
+            p.error(str(error))
     try:
         # SDL3 and the Rust library first: their checks are quick to fail, the module's C is not
         sdl_lib, sdl_include, sdl_libs = sdl(t, a)

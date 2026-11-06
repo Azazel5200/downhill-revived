@@ -187,6 +187,7 @@ out of date). New findings: copy `TEMPLATE.md` to the next free number on the la
 | 154 | [The rider missing from the inventory screen on phones](154-menu-rider-missing-on-phones.md) | current |  |
 | 155 | [The Android build for every arm64 core (ARMv8.0)](155-android-armv8-baseline.md) | current |  |
 | 158 | [Windows ARM64 fault context: keep the native PC](158-windows-arm64-fault-context.md) | in progress |  |
+| 159 | [Native Windows ARM64 EE fiber smoke target](159-windows-arm64-fiber-smoke.md) | in progress |  |
 | 075 | no file: the portable-core plan was numbered 075 on its branch and merged as 081 | renumbered | see 081 |
 | 113 | no file: the delta-time clock work was numbered 113 on its branch; the mixer's VBLANK time is in 139 | renumbered | see 139 |
 <!-- index:end -->

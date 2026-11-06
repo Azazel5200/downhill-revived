@@ -18,3 +18,144 @@ jobs:
         run: python tools/check_tree.py
       - name: docs linter (findings, citations, paths)
         run: python tools/check_docs.py
+  # The draft Windows ARM64 lane uses a free hosted ARM64 runner to test its small native
+  # fiber/guard executable. No game disc, licensed assets, SDL3, renderer or secrets required.
+  arm64-fiber-smoke:
+    if: github.event_name == 'pull_request' && github.head_ref == 'azazel/win-arm64-fiber-smoke'
+    runs-on: windows-11-vs2026-arm
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get WABT runtime headers (1.0.42)
+        shell: pwsh
+        run: |
+          Write-Host "Native runner architecture: $env:PROCESSOR_ARCHITECTURE"
+          if ($env:PROCESSOR_ARCHITECTURE -ne 'ARM64') { throw 'Expected a native ARM64 runner' }
+          $src = Join-Path $env:GITHUB_WORKSPACE 'build/wabt-src'
+          $dst = Join-Path $env:GITHUB_WORKSPACE 'build/wabt/include'
+          git clone --depth 1 --branch 1.0.42 https://github.com/WebAssembly/wabt.git $src
+          if ($LASTEXITCODE -ne 0) { throw 'Could not fetch WABT 1.0.42' }
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          Copy-Item (Join-Path $src 'wasm2c/*.h') -Destination $dst
+          if (!(Test-Path (Join-Path $dst 'wasm-rt.h'))) { throw 'Missing WABT runtime header' }
+      - name: Native Windows ARM64 fiber and both guard-fault checks
+        shell: pwsh
+        # Only this hosted, disposable runner may build on its system drive.
+        # Local builds keep the off-C: protection.
+        env:
+          DHD_CI_ALLOW_C_OUTPUT: '1'
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          if (!(Test-Path $vswhere)) { throw 'vswhere.exe is unavailable' }
+          $vs = & $vswhere -latest -products '*' -property installationPath
+          if ($LASTEXITCODE -ne 0 -or !$vs) { throw 'No Visual Studio installation found' }
+          $dev = Join-Path $vs 'Common7/Tools/VsDevCmd.bat'
+          if (!(Test-Path $dev)) { throw 'Visual Studio developer environment is missing' }
+          $setCmd = 'call "' + $dev + '" -no_logo -arch=arm64 -host_arch=arm64 >nul && set'
+          $rows = & $env:ComSpec /d /s /c $setCmd
+          if ($LASTEXITCODE -ne 0) { throw 'ARM64 VS developer environment failed' }
+          foreach ($row in $rows) {
+            if ($row -match '^([^=]+)=(.*)$') {
+              # Export through PowerShell's Env: provider so native child processes
+              # such as Python inherit these values, too.
+              Set-Item -Path ('Env:' + $Matches[1]) -Value $Matches[2]
+            }
+          }
+          # Some hosted images launch VsDevCmd without exporting the expected
+          # library metadata. Locate actual ARM64 directories rather than
+          # silently using the image's x64 defaults.
+          foreach ($key in @('VCToolsInstallDir', 'WindowsSdkDir', 'WindowsSDKVersion')) {
+            Write-Host ('VS developer variable {0}: {1}' -f $key, [bool][Environment]::GetEnvironmentVariable($key))
+          }
+          if (!$env:VCToolsInstallDir) {
+            $msvc = Get-ChildItem (Join-Path $vs 'VC/Tools/MSVC') -Directory -ErrorAction SilentlyContinue |
+              Where-Object { Test-Path (Join-Path $_.FullName 'lib/arm64') } |
+              Sort-Object Name -Descending | Select-Object -First 1
+            if (!$msvc) { throw 'MSVC ARM64 libraries are unavailable in this image' }
+            $env:VCToolsInstallDir = $msvc.FullName
+          }
+          if (!$env:WindowsSdkDir) {
+            $env:WindowsSdkDir = [Microsoft.Win32.Registry]::GetValue(
+              'HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows Kits\Installed Roots', 'KitsRoot10', $null)
+            if (!$env:WindowsSdkDir) { throw 'Windows SDK installation root is unavailable' }
+          }
+          if (!$env:WindowsSDKVersion) {
+            $sdkVersion = Get-ChildItem (Join-Path $env:WindowsSdkDir 'Lib') -Directory -ErrorAction SilentlyContinue |
+              Where-Object { (Test-Path (Join-Path $_.FullName 'ucrt/arm64')) -and
+                             (Test-Path (Join-Path $_.FullName 'um/arm64')) } |
+              Sort-Object Name -Descending | Select-Object -First 1
+            if (!$sdkVersion) { throw 'Windows SDK ARM64 libraries are unavailable' }
+            $env:WindowsSDKVersion = $sdkVersion.Name + '\'
+          }
+          python -B -c "import os; keys=('VCToolsInstallDir','WindowsSdkDir','WindowsSDKVersion'); print('Python developer variables:', {k:bool(os.getenv(k)) for k in keys})"
+          if ($LASTEXITCODE -ne 0) { throw 'Python could not inspect the ARM64 developer environment' }
+          $clang = Get-Command clang-cl.exe -ErrorAction SilentlyContinue
+          if ($clang) { $llvmBin = Split-Path $clang.Source }
+          else {
+            $candidate = Get-ChildItem (Join-Path $vs 'VC/Tools/Llvm') -Filter clang-cl.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if (!$candidate) { throw 'clang-cl.exe is unavailable' }
+            $llvmBin = $candidate.DirectoryName
+          }
+          if (!(Test-Path (Join-Path $llvmBin 'lld-link.exe'))) { throw 'lld-link.exe is unavailable' }
+          python -B -m unittest discover -s port/tools -p test_win_arm64_fiber_target.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Offline ARM64 routing tests failed' }
+          python -B port/tools/build_host64.py --target win-arm64 --fiber-test --llvm $llvmBin --wabt (Join-Path $env:GITHUB_WORKSPACE 'build/wabt')
+          if ($LASTEXITCODE -ne 0) { throw 'Native ARM64 fiber smoke failed' }
+      - name: Save standalone ARM64 fiber selftest (not the game)
+        uses: actions/upload-artifact@v4
+        with:
+          name: win-arm64-fiber-selftest-not-game
+          path: build/host64-winarm64/selftest_fiber.exe
+          if-no-files-found: error
+          retention-days: 7
+  # The existing x64 adapter must retain its behavior while the ARM64 adapter is added.
+  # Exercise it on a native Windows x64 host, not under Windows-on-ARM emulation.
+  win-x64-fiber-regression:
+    if: github.event_name == 'pull_request' && github.head_ref == 'azazel/win-arm64-fiber-smoke'
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get WABT runtime headers (1.0.42)
+        shell: pwsh
+        run: |
+          if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') { throw 'Expected native Windows x64' }
+          $src = Join-Path $env:GITHUB_WORKSPACE 'build/wabt-src'
+          $dst = Join-Path $env:GITHUB_WORKSPACE 'build/wabt/include'
+          git clone --depth 1 --branch 1.0.42 https://github.com/WebAssembly/wabt.git $src
+          if ($LASTEXITCODE -ne 0) { throw 'Could not fetch WABT 1.0.42' }
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          Copy-Item (Join-Path $src 'wasm2c/*.h') -Destination $dst
+          if (!(Test-Path (Join-Path $dst 'wasm-rt.h'))) { throw 'Missing WABT runtime header' }
+      - name: Native Windows x64 fiber and both guard-fault checks
+        shell: pwsh
+        env:
+          DHD_CI_ALLOW_C_OUTPUT: '1'
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          if (!(Test-Path $vswhere)) { throw 'vswhere.exe is unavailable' }
+          $vs = & $vswhere -latest -products '*' -property installationPath
+          if ($LASTEXITCODE -ne 0 -or !$vs) { throw 'No Visual Studio installation found' }
+          $dev = Join-Path $vs 'Common7/Tools/VsDevCmd.bat'
+          $setCmd = 'call "' + $dev + '" -no_logo -arch=amd64 -host_arch=amd64 >nul && set'
+          $rows = & $env:ComSpec /d /s /c $setCmd
+          if ($LASTEXITCODE -ne 0) { throw 'x64 VS developer environment failed' }
+          foreach ($row in $rows) {
+            if ($row -match '^([^=]+)=(.*)$') {
+              Set-Item -Path ('Env:' + $Matches[1]) -Value $Matches[2]
+            }
+          }
+          foreach ($key in @('VCToolsInstallDir', 'WindowsSdkDir', 'WindowsSDKVersion')) {
+            if (![Environment]::GetEnvironmentVariable($key)) { throw "Missing $key" }
+          }
+          $clang = Get-Command clang-cl.exe -ErrorAction SilentlyContinue
+          if ($clang) { $llvmBin = Split-Path $clang.Source }
+          else {
+            $candidate = Get-ChildItem (Join-Path $vs 'VC/Tools/Llvm') -Filter clang-cl.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if (!$candidate) { throw 'clang-cl.exe is unavailable' }
+            $llvmBin = $candidate.DirectoryName
+          }
+          python -B -m unittest discover -s port/tools -p test_win_arm64_fiber_target.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Windows compiler routing tests failed' }
+          python -B port/tools/build_host64.py --target win-x64 --fiber-test --llvm $llvmBin --wabt (Join-Path $env:GITHUB_WORKSPACE 'build/wabt')
+          if ($LASTEXITCODE -ne 0) { throw 'Native x64 fiber regression failed' }

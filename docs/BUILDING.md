@@ -95,6 +95,42 @@ To run a build, copy `dhd.exe` (with `dxcompiler.dll`) to a folder of its own an
 the disc image named: `iso = <path>` in its `dhd.ini` or `DHD_ISO=<path>` in the environment. The
 game has no disc dialog of its own; for players the launcher picks the disc (finding 093).
 
+### Experimental Windows ARM64 fiber smoke (not the game)
+
+`port/tools/build_host64.py --target win-arm64` currently supports **only** `--fiber-test`.
+It compiles the small Windows ARM64 guest-memory and EE-fiber selftest with the native Windows
+ARM64 switch adapter. It does **not** compile the game, SDL3 or the Rust renderer; do not pass a
+disc or wasm module to this command. The isolated test now passes on GitHub's native Windows
+ARM64 hosted runner. The hosted executable's normal 150-switch and stack-walk run also passes
+on the user's own ARM64 laptop; local guard-fault runs and local compilation are still pending
+(finding 159). This is not a supported release target.
+
+From a Windows 11 ARM64 developer PowerShell with `VCToolsInstallDir`, `WindowsSdkDir` and
+`WindowsSDKVersion` set for an **ARM64** MSVC/Windows SDK installation (and those directories
+containing `lib/arm64`), with the checkout and tools on your chosen non-system drive:
+
+    python -B port/tools/build_host64.py --target win-arm64 --fiber-test --llvm "<LLVM-bin-folder>" --wabt "<WABT-folder>"
+
+Both `clang-cl.exe` and `lld-link.exe` must be in the LLVM folder, and WABT must supply
+`include/wasm-rt.h`. The compiler builds `build/host64-winarm64/selftest_fiber.exe`, runs its
+switch/register/stack/backtrace checks and two guard-page-fault child runs. The builder sets
+`TMP`, `TEMP` and `TMPDIR` inside that output folder and rejects output on C:. Keep any separate
+tool downloads and developer caches on your chosen drive too (`DHD_DEVCACHES`, `--llvm`,
+`--wabt`). An installed MSVC/SDK elsewhere is **read** by the compiler, not copied into the
+checkout; installing Visual Studio itself is not controlled by this command.
+
+The smaller offline routing tests run without LLVM, MSVC, an SDK or the game disc:
+
+    python -B -m unittest discover -s port/tools -p test_win_arm64_fiber_target.py -v
+
+Passing those Python tests alone does **not** demonstrate that ARM64 assembly compiles, links or
+runs. The native `arm64-fiber-smoke` GitHub Actions job separately verifies those properties
+on every update to the experimental draft PR, without requiring the player's laptop. Successful
+jobs retain `win-arm64-fiber-selftest-not-game` for seven days as a downloadable, standalone
+test executable; it is **not** Downhill Revived and must not be offered as a game release.
+The same draft PR also runs the unchanged fiber selftest on a native Windows x64 runner as a
+regression check; both architectures' 150-switch and guard-fault tests pass in CI (finding 159).
+
 ### Tools outside the checkout
 
 Keep the checkout, `DHD_DEVCACHES` (below) and the Rust toolchain off the C: drive: the 64-bit

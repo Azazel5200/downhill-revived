@@ -32,12 +32,14 @@ enum { FIBERS=3, ROUNDS=50, NATIVE_STACK=8*1024*1024 };
 static uint32_t stack_pointer=0x100000;
 static HostFiber root, fibers[FIBERS+1];
 static unsigned switches, finished, children;
+static unsigned arm64_backtrace_failures;
+static unsigned arm64_backtrace_fallbacks;
 static int mode;  /* 1: --guest-guard, 2: --native-guard */
 
 static uint64_t fp_control(void) {
 #if defined(__x86_64__) || defined(_M_X64)
     return _mm_getcsr() & ~63u;  /* without the sticky exception flags */
-#elif defined(__aarch64__)
+#elif defined(__aarch64__) || defined(_M_ARM64)
     uint64_t f; __asm__ volatile("mrs %0, fpcr" : "=r"(f)); return f;
 #else
 #error Implement fp_control for this architecture
@@ -59,7 +61,7 @@ static NOINLINE void registers(unsigned id,HostFiber to) {
           y==f[8] && z==f[9]);
 }
 #ifdef _WIN32
-/* The TEB's stack bounds (fiber_win64.c) are the running stack's. */
+/* The TEB's stack bounds (fiber_win64.c / fiber_winarm64.c) are the running stack's. */
 static void stack_bounds(size_t size) {
     NT_TIB *tib=(NT_TIB *)NtCurrentTeb(); ULONG_PTR low,high; uintptr_t here=(uintptr_t)&tib;
     GetCurrentThreadStackLimits(&low,&high);
@@ -73,14 +75,55 @@ static NOINLINE void large_frame(void) {
     volatile char big[256*1024];
     big[0]=1; big[sizeof big-1]=2; CHECK(big[0]+big[sizeof big-1]==3);
 }
+#if defined(_WIN32) && (defined(_M_ARM64) || defined(__aarch64__))
+/* Windows' RtlCaptureStackBackTrace may return just one frame even on the ordinary root
+   thread. Independently walk the OS's ARM64 .pdata/.xdata unwind information, as the fault
+   reporter in guest_memory_win32.c does. Stop within the current TEB stack's limits: never
+   chase a synthetic fiber past its separate stack into an unrelated root stack. */
+static NOINLINE int arm64_virtual_backtrace(void **frames,int capacity) {
+    CONTEXT context;
+    RtlCaptureContext(&context);
+    ULONG_PTR low=0,high=0;
+    GetCurrentThreadStackLimits(&low,&high);
+    int n=0;
+    while (n<capacity) {
+        DWORD64 pc=context.Pc, sp=context.Sp;
+        if (!pc || sp<low || sp>=high || (sp&15)) break;
+        frames[n++]=(void *)(uintptr_t)pc;
+        DWORD64 image=0;
+        PRUNTIME_FUNCTION entry=RtlLookupFunctionEntry(pc,&image,NULL);
+        if (!entry) break;  /* no unwind metadata: do not guess a return address */
+        void *handler_data=NULL;
+        DWORD64 establisher=0;
+        RtlVirtualUnwind(UNW_FLAG_NHANDLER,image,pc,entry,&context,
+                         &handler_data,&establisher,NULL);
+        if (context.Pc==pc || context.Sp<sp) break;  /* avoid loops or a downward walk */
+    }
+    return n;
+}
+#endif
 static NOINLINE void backtrace_ends(void) {
     void *frames[64];
 #ifdef _WIN32
     int n=RtlCaptureStackBackTrace(0,64,frames,NULL);
+#if defined(_M_ARM64) || defined(__aarch64__)
+    if (n<2 || n>=64) {
+        int walked=arm64_virtual_backtrace(frames,64);
+        fprintf(stderr,"Windows ARM64 stack walk: RtlCaptureStackBackTrace=%d, "
+                "RtlVirtualUnwind=%d frames\n",n,walked);
+        if (walked>=2 && walked<64) ++arm64_backtrace_fallbacks;
+        else ++arm64_backtrace_failures;
+    }
+#endif
 #else
     int n=backtrace(frames,64);
 #endif
+#if defined(_WIN32) && (defined(_M_ARM64) || defined(__aarch64__))
+    /* A short Windows fast-path trace is accepted only if the independently bounded
+       OS unwind-metadata walk yields at least two frames on that same stack. */
+#else
     CHECK(n>=2 && n<64);
+#endif
 }
 static void child(void *arg) { ++children; host_fiber_switch((HostFiber)(uintptr_t)arg); abort(); }
 static void worker(void *arg) {
@@ -118,6 +161,14 @@ int main(int argc,char **argv) {
 #ifdef _WIN32
     SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX);
 #endif
+#if defined(_WIN32) && (defined(_M_ARM64) || defined(__aarch64__))
+    /* Isolate an ordinary CRT return from the post-fiber shutdown path. */
+    if (argc==2 && !strcmp(argv[1],"--exit-probe")) return 3;
+    if (argc==2 && !strcmp(argv[1],"--trace-exit-probe")) {
+        backtrace_ends();
+        return 3;
+    }
+#endif
     if (argc==2) mode=!strcmp(argv[1],"--guest-guard") ? 1 : !strcmp(argv[1],"--native-guard") ? 2 : -1;
     CHECK(mode>=0);
     for (unsigned id=0;id<=FIBERS;id++) {
@@ -126,6 +177,16 @@ int main(int argc,char **argv) {
     }
     wasm_rt_memory_t memory={0};
     wasm_rt_allocate_memory(&memory,32768,32770,false,65536);
+#if defined(_WIN32) && (defined(_M_ARM64) || defined(__aarch64__))
+    uintptr_t root_teb=(uintptr_t)NtCurrentTeb();
+    void *root_dealloc=*(void **)(root_teb+0x1478);
+    void *root_fiber_data=((NT_TIB *)root_teb)->FiberData;
+    ULONG_PTR root_low,root_high;
+    GetCurrentThreadStackLimits(&root_low,&root_high);
+    fprintf(stderr,"Windows ARM64 root-thread backtrace probe\n");
+    stack_bounds(0);
+    backtrace_ends();
+#endif
     host64_fiber_bind(&stack_pointer); root=host_fiber_main(); CHECK(root==65);
     for (unsigned id=1;id<=FIBERS;id++) {
         fibers[id]=host_fiber_create(worker,(void *)(uintptr_t)id); CHECK(fibers[id]==id);
@@ -154,7 +215,27 @@ int main(int argc,char **argv) {
     host_fiber_delete(slots[5]); CHECK(host_fiber_create(noop,NULL)==slots[5]);
     host64_fiber_shutdown(); CHECK(!host64_fiber_id());
     wasm_rt_free_memory(&memory);
+#if defined(_WIN32) && (defined(_M_ARM64) || defined(__aarch64__))
+    ULONG_PTR after_low,after_high;
+    GetCurrentThreadStackLimits(&after_low,&after_high);
+    CHECK((uintptr_t)NtCurrentTeb()==root_teb);
+    CHECK(after_low==root_low && after_high==root_high);
+    CHECK(*(void **)(root_teb+0x1478)==root_dealloc);
+    CHECK(((NT_TIB *)root_teb)->FiberData==root_fiber_data);
+#endif
+#if defined(_WIN32) && (defined(_M_ARM64) || defined(__aarch64__))
+    printf("PASS: ARM64 core fibers: %u switches keep registers, FP control, __stack_pointer and "
+           "depth; a fiber from a fiber; a large frame; 64 slots, reuse, ranges "
+           "(backtrace checked separately)\n",switches);
+    if (arm64_backtrace_failures) {
+        fprintf(stderr,"FAIL: ARM64 stack walk below two frames in %u checks\n",arm64_backtrace_failures);
+        return 3;
+    }
+    printf("PASS: ARM64 stack traces: %u bounded RtlVirtualUnwind fallbacks\n",
+           arm64_backtrace_fallbacks);
+#else
     printf("PASS: fibers: %u switches keep registers, FP control, __stack_pointer and depth; a fiber "
            "from a fiber; a large frame; a backtrace; 64 slots, reuse, ranges\n",switches);
+#endif
     return 0;
 }
