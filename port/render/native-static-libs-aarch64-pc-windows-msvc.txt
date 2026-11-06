@@ -1,0 +1,5 @@
+# Windows ARM64 MSVC, Rust 1.97.1: initial allow-list based on the same native Windows ABI's
+# x64 list. The hosted ARM64 staticlib build must verify its *actual* printed native-static-libs;
+# update this target-specific file only for a system library confirmed by the native build.
+kernel32.lib ntdll.lib userenv.lib ws2_32.lib dbghelp.lib /defaultlib:libcmt
+bcrypt.lib advapi32.lib
