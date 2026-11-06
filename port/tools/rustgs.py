@@ -126,11 +126,12 @@ SETTINGS_CRATE = 'dhd_settings'   # --crate: the browser's dhd.ini module (wasm3
 CRATES = (RENDER_CRATE, SETTINGS_CRATE)
 SETTINGS_WEB_OUT = ROOT / 'build' / 'web'   # dhd_settings.wasm
 X64 = 'x86_64-pc-windows-msvc'
+WIN_ARM64 = 'aarch64-pc-windows-msvc'  # independent renderer compile check; full game remains blocked
 WASM = 'wasm32-unknown-unknown'
 ANDROID = 'aarch64-linux-android'  # build_host64.py --target android-arm64 (finding 091)
 LINUX = 'x86_64-unknown-linux-gnu'  # build_host64.py --target linux-x64 (here, or cross-built for WSL)
 MAC = 'aarch64-apple-darwin'      # build_host64.py --target macos-arm64, on a Mac
-TARGETS = (X64, WASM, ANDROID, LINUX, MAC)   # i686 is retired
+TARGETS = (X64, WIN_ARM64, WASM, ANDROID, LINUX, MAC)   # i686 is retired
 ARCHIVE_TARGETS = (ANDROID, LINUX, MAC)   # libdhd_render.a
 CHECK_TARGETS = TARGETS
 PROFILES = ('release', 'fixloop')
@@ -178,9 +179,16 @@ def home(var):
     if not value:
         refuse('%s is not set (the Rust toolchain must live off the C: drive)' % var)
     path = os.path.normpath(value)
-    if os.path.splitdrive(path)[0].upper() == 'C:':
+    if os.path.splitdrive(path)[0].upper() == 'C:' and not hosted_ci_workspace():
         refuse('%s is on C: (%s); the system drive stays free' % (var, path))
     return path
+
+
+def hosted_ci_workspace():
+    """Only disposable GitHub-hosted runners may use their system-drive checkout/cache."""
+    return (os.environ.get('GITHUB_ACTIONS') == 'true' and
+            os.environ.get('RUNNER_ENVIRONMENT') == 'github-hosted' and
+            os.environ.get('DHD_CI_ALLOW_C_OUTPUT') == '1')
 
 
 def spellings(path):
@@ -202,7 +210,7 @@ def rustflags(triple, crate=RENDER_CRATE):
 
 def target_dir():
     path = CARGO_TARGETS / hashlib.sha1(os.path.normcase(str(ROOT)).encode()).hexdigest()[:8]
-    if path.resolve().drive.upper() == 'C:':
+    if path.resolve().drive.upper() == 'C:' and not hosted_ci_workspace():
         refuse('the cargo target dir %s is on C:' % path)
     return path
 
@@ -224,6 +232,13 @@ def c_tools(triple):
     member by its file name, where lib.exe and llvm-lib keep the path they are given (ring's
     pregenerated objects come by their registry path). x64 compiles with MSVC's cl, found by cc."""
     var = triple.replace('-', '_')
+    if triple == WIN_ARM64:
+        # ring's Windows ARM64 assembly requires clang rather than cl.exe. VS's native ARM64
+        # developer environment supplies the MSVC headers, SDK and archiver automatically.
+        compiler = shutil.which('clang')
+        if not compiler or not Path(compiler).is_file():
+            refuse('no LLVM clang for ring on native Windows ARM64')
+        return {'CC_' + var: compiler, 'CFLAGS_' + var: '--target=' + WIN_ARM64 + ' -g0'}
     if triple == X64:
         found = shutil.which('llvm-ar') or str(Path.home() / 'scoop/apps/llvm/current/bin/llvm-ar.exe')
         if not Path(found).is_file():
@@ -682,7 +697,8 @@ def common(triple, profile):
         refuse('--profile %s: one of %s' % (profile, ', '.join(PROFILES)))
     # A C: worktree is safe when its build folder is junctioned to the work drive.
     # Cargo's own target/cache locations are checked separately.
-    if os.path.splitdrive(str(ROOT))[0].upper() == 'C:' and (ROOT / 'build').resolve().drive.upper() == 'C:':
+    if (os.path.splitdrive(str(ROOT))[0].upper() == 'C:' and
+            (ROOT / 'build').resolve().drive.upper() == 'C:' and not hosted_ci_workspace()):
         refuse('the worktree %s needs its build folder off C: (a junction is fine)' % ROOT)
     return cargo_env(triple)
 

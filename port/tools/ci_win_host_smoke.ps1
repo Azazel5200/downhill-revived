@@ -1,5 +1,5 @@
 # Native GitHub runner only: configure the target VS/SDK compiler and run the host OS smoke.
-param([ValidateSet('arm64', 'x64')][string]$Arch, [switch]$SDL3)
+param([ValidateSet('arm64', 'x64')][string]$Arch, [switch]$SDL3, [switch]$RustCheck)
 $ErrorActionPreference = 'Stop'
 $expected = if ($Arch -eq 'arm64') { 'ARM64' } else { 'AMD64' }
 if ($env:PROCESSOR_ARCHITECTURE -ne $expected) { throw "Expected native $expected runner" }
@@ -62,4 +62,26 @@ if ($SDL3) {
     $env:PATH = $llvmBin + [IO.Path]::PathSeparator + $env:PATH
     python -B port/tools/build_win_sdl_smoke.py --llvm $llvmBin
     if ($LASTEXITCODE -ne 0) { throw 'Native Windows ARM64 SDL3 build or smoke failed' }
+}
+if ($RustCheck) {
+    if ($Arch -ne 'arm64') { throw 'Rust ARM64 preflight must run natively' }
+    $env:DHD_DEVCACHES = Join-Path $env:GITHUB_WORKSPACE 'build/development-cache'
+    $env:CARGO_HOME = Join-Path $env:GITHUB_WORKSPACE 'build/cargo'
+    $env:RUSTUP_HOME = Join-Path $env:GITHUB_WORKSPACE 'build/rustup'
+    $env:PATH = $llvmBin + [IO.Path]::PathSeparator + $env:PATH
+    if (!(Get-Command rustup.exe -ErrorAction SilentlyContinue)) { throw 'rustup unavailable' }
+    rustup toolchain install 1.97.1 --profile minimal --target aarch64-pc-windows-msvc
+    if ($LASTEXITCODE -ne 0) { throw 'Rust 1.97.1 ARM64 toolchain unavailable' }
+    Push-Location port/render
+    try {
+        # The project's .cargo/config.toml forces offline mode. Temporarily override that
+        # setting ONLY to fetch the existing lockfile; rustgs's cargo check stays offline.
+        cargo +1.97.1 --config net.offline=false fetch --locked --target aarch64-pc-windows-msvc
+        if ($LASTEXITCODE -ne 0) { throw 'Cargo dependencies unavailable' }
+    }
+    finally { Pop-Location }
+    python -B -m unittest discover -s port/tools -p test_win_arm64_rust_target.py -v
+    if ($LASTEXITCODE -ne 0) { throw 'Offline Windows ARM64 Rust routing tests failed' }
+    python -B port/tools/rustgs.py check --target aarch64-pc-windows-msvc
+    if ($LASTEXITCODE -ne 0) { throw 'Native Windows ARM64 Rust renderer check failed' }
 }
