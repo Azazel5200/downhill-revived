@@ -101,3 +101,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Offline ARM64 routing tests failed' }
           python -B port/tools/build_host64.py --target win-arm64 --fiber-test --llvm $llvmBin --wabt (Join-Path $env:GITHUB_WORKSPACE 'build/wabt')
           if ($LASTEXITCODE -ne 0) { throw 'Native ARM64 fiber smoke failed' }
+      - name: Save standalone ARM64 fiber selftest (not the game)
+        uses: actions/upload-artifact@v4
+        with:
+          name: win-arm64-fiber-selftest-not-game
+          path: build/host64-winarm64/selftest_fiber.exe
+          if-no-files-found: error
+          retention-days: 7

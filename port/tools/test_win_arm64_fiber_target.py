@@ -1,4 +1,4 @@
-"""Offline routing checks for the unvalidated Windows ARM64 fiber smoke target.
+"""Offline routing checks for the experimental Windows ARM64 fiber smoke target.
 
 These do not compile ARM64 code or substitute for a run on Windows ARM64 hardware.
 """

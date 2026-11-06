@@ -24,8 +24,9 @@ Acceptance before marking this finding current:
    `--guest-guard` and `--native-guard` child runs.
 4. The existing Windows x64 fiber test must continue to pass unchanged.
 
-Items 2–4 require a matching Windows installation and are **unverified** here. Do not merge
-this lane or claim ARM64 portability based only on Python tests.
+Items 2–3 now pass on a native GitHub-hosted Windows 11 ARM64 runner. Item 4 and a repeat of
+items 2–3 on the user's own Windows 11 ARM64 laptop are still pending. Do not merge this lane
+or claim full ARM64 game portability based on this isolated selftest.
 
 ## Progress
 
@@ -41,7 +42,8 @@ this lane or claim ARM64 portability based only on Python tests.
   backtrace remains too short, so the job remains red.
 - [x] Compile/link the new adapter with native Windows ARM64 clang-cl on a hosted machine.
 - [x] Run the 150-switch core checks and both deliberate guard-fault cases on hosted ARM64.
-- [ ] Inspect and validate its ARM64 exception unwinding metadata and stack walk.
+- [x] Exercise native ARM64 unwind metadata and obtain bounded backtraces from both root and
+  switched fiber contexts on the hosted runner.
 - [x] Confirm the normal selftest exits with its intended diagnostic code (`3`) and not an
   unexpected access violation after returning from the fiber stack.
 - [ ] Resolve Windows ARM64 stack-walk depth, or independently establish an appropriate
@@ -159,9 +161,21 @@ this lane or claim ARM64 portability based only on Python tests.
   the issue discusses the independently captured-context/unwind-table approach. It does not
   establish the cause of this **specific** Windows ARM64 runner's one-frame result:
   https://github.com/microsoft/STL/issues/3889.
+- The subsequent native Windows ARM64 hosted job passed **both CI jobs**. The fast-path
+  `RtlCaptureStackBackTrace` still returned **one frame** in each of three checks (root thread
+  and two fiber contexts); the independent, stack-bounded `RtlVirtualUnwind` walk returned
+  **five frames in each check**, allowing the selftest to pass without dropping the two-frame
+  requirement. All 150 fiber switches and both expected guard faults (`0xc0000005`) passed
+  again, with no abnormal process shutdown. CI run:
+  https://github.com/Azazel5200/downhill-revived/actions/runs/42161654246.
+- Preserve the small statically linked **selftest only** as a seven-day GitHub Actions artifact
+  after successful native CI, so the same executable can later be run from a non-system drive
+  on the user's laptop without first installing LLVM/MSVC. It contains no game binary, disc
+  data or game assets, and is **not** a playable release.
 
 ## Result
 
-ARM64 compiler/linker and the core 150-switch/guard behavior are now validated on GitHub's
-native hosted hardware; normal shutdown is verified. Stack-walk depth and the user's on-device
-test remain unresolved. This draft is not a player-ready ARM64 executable; do not merge it yet.
+ARM64 compiler/linker, the core 150-switch/guard behavior, clean shutdown and an alternative
+bounded native stack walk are now validated on GitHub's native hosted hardware. The user's
+on-device test and unchanged Windows x64 regression test remain pending. This draft is not a
+player-ready ARM64 game executable; do not merge it yet.

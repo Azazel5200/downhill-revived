@@ -100,8 +100,9 @@ game has no disc dialog of its own; for players the launcher picks the disc (fin
 `port/tools/build_host64.py --target win-arm64` currently supports **only** `--fiber-test`.
 It compiles the small Windows ARM64 guest-memory and EE-fiber selftest with the native Windows
 ARM64 switch adapter. It does **not** compile the game, SDL3 or the Rust renderer; do not pass a
-disc or wasm module to this command. This is a pending native-device experiment (finding 159),
-not a supported release target.
+disc or wasm module to this command. The isolated test now passes on GitHub's native Windows
+ARM64 hosted runner, but testing on the user's own device remains pending (finding 159);
+this is not a supported release target.
 
 From a Windows 11 ARM64 developer PowerShell with `VCToolsInstallDir`, `WindowsSdkDir` and
 `WindowsSDKVersion` set for an **ARM64** MSVC/Windows SDK installation (and those directories
@@ -121,7 +122,11 @@ The smaller offline routing tests run without LLVM, MSVC, an SDK or the game dis
 
     python -B -m unittest discover -s port/tools -p test_win_arm64_fiber_target.py -v
 
-Passing those Python tests does **not** demonstrate that ARM64 assembly compiles, links or runs.
+Passing those Python tests alone does **not** demonstrate that ARM64 assembly compiles, links or
+runs. The native `arm64-fiber-smoke` GitHub Actions job separately verifies those properties
+on every update to the experimental draft PR, without requiring the player's laptop. Successful
+jobs retain `win-arm64-fiber-selftest-not-game` for seven days as a downloadable, standalone
+test executable; it is **not** Downhill Revived and must not be offered as a game release.
 
 ### Tools outside the checkout
 
