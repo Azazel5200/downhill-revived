@@ -34,7 +34,9 @@ measure frame rates. No user laptop or game disc is needed for this phase.
 - [x] 2026-11-06: extend the existing Rust wrapper's COFF CodeView path normalization
   to ARM64; use a target-specific native-library allow-list and a streamed CPU
   architecture check to reject accidental x64 archive members.
-- [ ] Native CI actually builds and validates `dhd_render.lib`.
+- [x] 2026-11-06: native [CI run 42172540886](https://github.com/Azazel5200/downhill-revived/actions/runs/42172540886)
+  built `dhd_render.lib` and passed the full wrapper, dependency, provenance,
+  archive-machine and SHA-256 gates; report uploaded as a short-lived CI artifact.
 
 ## Decisions
 
@@ -60,6 +62,13 @@ measure frame rates. No user laptop or game disc is needed for this phase.
   `windows.0.52.0.lib`. No compiler or CPU-architecture error was reported.
   Add that exact, observed library to the target-specific allow-list and rerun;
   the validator and final report were not reached on this attempt.
+- Second native [CI run 42172540886](https://github.com/Azazel5200/downhill-revived/actions/runs/42172540886)
+  passed all jobs. It compiled in release profile with Rust 1.97.1, normalized the
+  same 60 `S_OBJNAME` records, and the streamed archive validator found **2,427 ARM64
+  COFF objects** (no recognized x86/x64 objects) in **19,746,805** archived bytes.
+  The library's SHA-256 was
+  `1df5c1613e33738a2353bc411bc8b1739194f85ec83659d399243f8947ed0268`.
+  The run uploaded a `rustgs` JSON report, **not** the compiled library itself.
 
 ## References
 
@@ -69,6 +78,8 @@ measure frame rates. No user laptop or game disc is needed for this phase.
 
 ## Result
 
-Pending the native Windows ARM64 static library build. Do not claim the full game
-is ported until host linkage, display, input, sound, state and performance checks
-run on the appropriate hardware.
+**The native Windows ARM64 Rust/wgpu static library build and validation passed.**
+Do not claim the full game is ported until the C host can link this library and
+the game's display, input, sound, state and performance run on appropriate hardware.
+The compiled `.lib` existed on the ephemeral CI runner; it was not published as a
+downloadable binary. Keep this finding `in progress` until the draft lane is integrated.
