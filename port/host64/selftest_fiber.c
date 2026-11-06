@@ -138,6 +138,10 @@ int main(int argc,char **argv) {
 #ifdef _WIN32
     SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX);
 #endif
+#if defined(_WIN32) && (defined(_M_ARM64) || defined(__aarch64__))
+    /* Isolate an ordinary CRT return from the post-fiber shutdown path. */
+    if (argc==2 && !strcmp(argv[1],"--exit-probe")) return 3;
+#endif
     if (argc==2) mode=!strcmp(argv[1],"--guest-guard") ? 1 : !strcmp(argv[1],"--native-guard") ? 2 : -1;
     CHECK(mode>=0);
     for (unsigned id=0;id<=FIBERS;id++) {

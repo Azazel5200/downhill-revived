@@ -37,11 +37,13 @@ this lane or claim ARM64 portability based only on Python tests.
 - [x] 2026-11-06: add an opt-in `windows-11-vs2026-arm` GitHub Actions job for this draft PR
   only. It provisions WABT headers in its ephemeral workspace, discovers LLVM and Visual Studio
   ARM64, then attempts the real 150-switch and two guard-fault runs without the user's laptop.
-- [ ] Collect and interpret the hosted ARM64 job's outcome; a queued or missing runner is not a
-  passing test. Fix compiler errors in this lane before requesting on-device testing.
+- [x] Collect the hosted ARM64 job's results: core switching and guard faults pass; the
+  backtrace and normal-process exit still fail, so the job remains red.
 - [x] Compile/link the new adapter with native Windows ARM64 clang-cl on a hosted machine.
+- [x] Run the 150-switch core checks and both deliberate guard-fault cases on hosted ARM64.
 - [ ] Inspect and validate its ARM64 exception unwinding metadata and stack walk.
-- [ ] Run the native selftest and both deliberate guard faults on Windows 11 ARM64 hardware.
+- [ ] Resolve backtrace behavior and the abnormal exit code of the normal selftest run.
+- [ ] Repeat final verification on the user's own Windows 11 ARM64 hardware.
 - [ ] Rerun the unchanged win-x64 fiber selftest and the full port tier in the correct environment.
 
 ## Decisions
@@ -114,8 +116,22 @@ this lane or claim ARM64 portability based only on Python tests.
   complete switching/slot test and both deliberate guard-fault children, and **fails the job
   at the end** if the backtrace requirement is unmet. The original x64 assertions stay strict
   and unchanged. No partial PASS is a claim of overall ARM64 success.
+- The native hosted run then completed **all 150 switches**, register and FP-control checks,
+  module stack-pointer and call-depth checks, nested fiber, large native stack frame, 64-slot
+  allocation/reuse and stack-range checks. **Both deliberate guard faults** raised the expected
+  Windows access violation `0xc0000005` and printed their expected markers. The backtrace
+  remained one frame both on the root thread and within fibers (3 short-trace checks), so the
+  job is correctly **red**. The regular selftest process returned `0xc0000005` instead of its
+  intended nonzero diagnostic result (3); investigate its exit path separately. The fault
+  child exit codes are expected; the main-process code is not. This is a proven **core fiber
+  smoke**, not a fully passing Windows ARM64 port.
+- A dedicated `--exit-probe` now returns status 3 before allocating guest memory or creating
+  fibers. The next hosted run compares that plain Windows ARM64 CRT return to the same result
+  after fiber shutdown, to separate a general runner/toolchain exit problem from corrupted
+  state remaining after a context-switch sequence.
 
 ## Result
 
-Pending compiler/SDK and native-device validation. This draft only exposes an intentionally
-limited standalone smoke target, not a player-ready ARM64 executable.
+ARM64 compiler/linker and the core 150-switch/guard behavior are now validated on GitHub's
+native hosted hardware. Stack-walk depth, main-process shutdown and the user's on-device test
+remain unresolved. This draft is not a player-ready ARM64 executable; do not merge it yet.
