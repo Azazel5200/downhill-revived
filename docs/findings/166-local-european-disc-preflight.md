@@ -42,7 +42,7 @@ plus metadata-only CLI output. Real-disc validation is still pending.
 
 ## Later, with the owner's laptop
 
-    python -B port/tools/disc_probe.py "D:\\My Games\\Downhill.iso"
+    python -B port/tools/disc_probe.py "PATH_TO_YOUR_ISO"
 
 The example path is a placeholder, not a known location or file on the
 owner's computer. Paste only the resulting text metadata. The ISO remains on

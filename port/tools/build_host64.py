@@ -446,11 +446,14 @@ def main():
         except RuntimeError as error:
             p.error(str(error))
     try:
-        # SDL3 and the Rust library first: their checks are quick to fail, the module's C is not
+        # SDL3 supplies the C host's headers. Real game builds keep their established Rust-first
+        # order; the synthetic fixture checks C before compiling the expensive Rust renderer, so
+        # a new ARM64 C compatibility error does not cost a full cold Rust build on each CI try.
         sdl_lib, sdl_include, sdl_libs = sdl(t, a)
         step('SDL3')
-        report = rust_library(t, work)
-        step('Rust library')
+        if not a.fake:
+            report = rust_library(t, work)
+            step('Rust library')
         if a.fake:
             wasm = work / 'fake.wasm'
             run([a.wasi/'bin/clang.exe', '-O2', '-nostdlib', '-ffp-contract=off',
@@ -612,6 +615,9 @@ def main():
             objects = [done[s].result() for s in sources]
             host_objects = [done[s].result() for s in host_sources]
         step('C')
+        if a.fake:
+            report = rust_library(t, work)
+            step('Rust library')
         if a.host_library:
             library = a.host_library.resolve()
             if not library.exists():

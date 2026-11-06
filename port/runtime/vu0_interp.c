@@ -25,9 +25,10 @@
 #include <stddef.h>
 #include <string.h>
 #include <time.h>
-#if defined(__aarch64__)
-/* The Android build (finding 091): SIMDe maps these SSE calls to NEON, the same IEEE single
+#if defined(__aarch64__) || defined(_M_ARM64)
+/* ARM64 (finding 091): SIMDe maps these SSE calls to NEON, the same IEEE single
    operations (under FPCR instead of MXCSR). */
+#include <stdatomic.h> /* SIMDe's SSE fence uses atomic_thread_fence on ARM64. */
 #define SIMDE_ENABLE_NATIVE_ALIASES
 #include <simde/x86/sse2.h>
 #include <arm_neon.h>
@@ -208,9 +209,9 @@ static __m128 arithmetic4(__m128 value)
 {
     __m128i bits = _mm_castps_si128(value), exponent = _mm_and_si128(bits, _mm_set1_epi32(0x7f800000));
     __m128i sign = _mm_and_si128(bits, _mm_set1_epi32((int)0x80000000));
-    __m128i small = _mm_cmpeq_epi32(exponent, _mm_setzero_si128());
+    __m128i subnormal_mask = _mm_cmpeq_epi32(exponent, _mm_setzero_si128());
     __m128i large = _mm_cmpeq_epi32(exponent, _mm_set1_epi32(0x7f800000));
-    bits = _mm_or_si128(_mm_andnot_si128(small, bits), _mm_and_si128(small, sign));
+    bits = _mm_or_si128(_mm_andnot_si128(subnormal_mask, bits), _mm_and_si128(subnormal_mask, sign));
     bits = _mm_or_si128(_mm_andnot_si128(large, bits),
                         _mm_and_si128(large, _mm_or_si128(sign, _mm_set1_epi32(0x7f7fffff))));
     return _mm_castsi128_ps(bits);
@@ -253,9 +254,9 @@ static inline void vu_ieee_probe_result(__m128 v, int d)
 static inline __attribute__((always_inline)) __m128 ieee_clamp4(__m128 value)
 {
     __m128i bits = _mm_castps_si128(value), magnitude = _mm_and_si128(bits, _mm_set1_epi32(0x7fffffff));
-    __m128i small = _mm_cmplt_epi32(magnitude, _mm_set1_epi32(0x00800000));
+    __m128i subnormal_mask = _mm_cmplt_epi32(magnitude, _mm_set1_epi32(0x00800000));
     __m128i large = _mm_cmpgt_epi32(magnitude, _mm_set1_epi32(0x7f7fffff));
-    bits = _mm_andnot_si128(_mm_and_si128(small, _mm_set1_epi32(0x7fffffff)), bits);
+    bits = _mm_andnot_si128(_mm_and_si128(subnormal_mask, _mm_set1_epi32(0x7fffffff)), bits);
     return _mm_castsi128_ps(_mm_xor_si128(bits, _mm_and_si128(large, _mm_xor_si128(magnitude, _mm_set1_epi32(0x7f7fffff)))));
 }
 static inline __attribute__((always_inline)) __m128 operand4(__m128 value)

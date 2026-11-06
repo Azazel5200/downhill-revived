@@ -136,7 +136,7 @@ extracted game assets or generated licensed core.
 To identify a locally owned European/Spanish disc **before** attempting the
 currently USA-only game build, use this metadata-only diagnostic:
 
-    python -B port/tools/disc_probe.py "D:\\My Games\\Downhill.iso"
+    python -B port/tools/disc_probe.py "PATH_TO_YOUR_ISO"
 
 It reads the ISO in place and prints its `SYSTEM.CNF` boot serial, PAL/NTSC
 setting, disc version, file count, boot ELF size and SHA-256. The optional
@@ -144,6 +144,13 @@ setting, disc version, file count, boot ELF size and SHA-256. The optional
 extracted, changed or sent anywhere; share only the text report if requesting
 release support (finding 166). `SLES_522.02` confirms the separate European
 game core is required; this diagnostic does not make that disc compatible.
+
+The next **asset-free native ARM64 integration gate** (finding 167) exercises
+`build_host64.py --target win-arm64 --fake --run`: the shared C host, synthetic
+WASM guest, SDL3 and Rust renderer are compiled and linked into a native ARM64
+executable. This is not a playable game: the `--fake` guest has no tracks,
+graphics, characters or disc content. The dedicated CI lane fetches pinned
+toolchains and tests its synthetic execution independently of the owner's ISO.
 
 Passing those Python tests alone does **not** demonstrate that ARM64 assembly compiles, links or
 runs. The native `arm64-fiber-smoke` GitHub Actions job separately verifies those properties
