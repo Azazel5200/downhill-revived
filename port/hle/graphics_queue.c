@@ -6,8 +6,8 @@
 #include <string.h>
 #include <SDL3/SDL_mutex.h>   /* SDL_Semaphore */
 #include <SDL3/SDL_thread.h>
-#if defined(__aarch64__)
-/* The Android build (finding 091): FPCR for MXCSR; isb for pause: yield is a no-op on the Cortex
+#if defined(__aarch64__) || defined(_M_ARM64)
+/* ARM64 (finding 091): FPCR for MXCSR; isb for pause: yield is a no-op on the Cortex
    cores, so the 4096-step spins before a sleep lasted ~2 us instead of x86's ~100 us and the
    workers slept and were woken (a futex call each side) far more often (AND2). */
 static inline unsigned fp_control(void) { unsigned long v; __asm__ volatile("mrs %0, fpcr" : "=r"(v)); return (unsigned)v; }

@@ -773,8 +773,10 @@ void host_init(void)
     host_thread_name("game");
     DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(), &game_thread, 0, FALSE,
                     DUPLICATE_SAME_ACCESS);  /* the watches, DHD_DUMP and the freeze log */
+#if !defined(_M_ARM64)
     if (getenv("DHD_WATCH") || state_trace_watch_spec())
         AddVectoredExceptionHandler(1, watch_hit);
+#endif
 #else
     struct sigaction sa, dump_sa;
     const char *dump = getenv("DHD_DUMP");

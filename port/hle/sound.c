@@ -12,7 +12,13 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(__aarch64__) || defined(_M_ARM64)
+/* ARM64 retains the same SSE2 integer operations through SIMDe's NEON aliases. */
+#define SIMDE_ENABLE_NATIVE_ALIASES
+#include <simde/x86/sse2.h>
+#else
 #include <emmintrin.h> /* the normal i686 port requires SSE2 */
+#endif
 
 
 #define SND_RATE 48000

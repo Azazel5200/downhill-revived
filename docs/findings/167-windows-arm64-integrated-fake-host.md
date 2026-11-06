@@ -60,6 +60,13 @@ the actual game compiles, boots, runs at 60 fps or supports Spanish.
   debug-watchpoint path unchanged. On Windows ARM64, report unsupported
   hardware watchpoints and direct the user to portable DHD_STATE_WATCH.
   The next hosted compilation must verify these changes.
+- [x] Second integrated attempt, run 42213666366: SDL3 compiled in 126.1 s,
+  Rust staticlib compiled in 182.0 s, and the synthetic guest converted. The
+  ARM64-specific CONTEXT errors were gone; the next compiler error identified
+  one remaining registration of the x64-only watchpoint handler in host_init.
+  Gate its registration alongside its x64-only definition. Also explicitly
+  route ARM64 SIMD audio/VIF through SIMDe and ARM64 graphics-queue FP control
+  through its native FPCR path, preserving all x64 branches.
 - [ ] Hosted full synthetic ARM64 build succeeds.
 - [ ] Hosted headless synthetic/negative tests pass.
 - [ ] Real, unmodified European game core compiled and played on hardware
