@@ -74,7 +74,9 @@ if ($RustCheck) {
     if ($LASTEXITCODE -ne 0) { throw 'Rust 1.97.1 ARM64 toolchain unavailable' }
     Push-Location port/render
     try {
-        cargo +1.97.1 fetch --locked --target aarch64-pc-windows-msvc
+        # The project's .cargo/config.toml forces offline mode. Temporarily override that
+        # setting ONLY to fetch the existing lockfile; rustgs's cargo check stays offline.
+        cargo +1.97.1 --config net.offline=false fetch --locked --target aarch64-pc-windows-msvc
         if ($LASTEXITCODE -ne 0) { throw 'Cargo dependencies unavailable' }
     }
     finally { Pop-Location }

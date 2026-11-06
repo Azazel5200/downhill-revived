@@ -54,6 +54,11 @@ initialize a GPU device or validate game state, controller, audio or frame rates
   target. The native Windows ARM64 Rust triple and Rustup manifest were not registered.
 - The project requires fully offline Cargo verification. An ephemeral CI runner must fetch
   the *locked* dependency graph before it can exercise that gate.
+- First hosted attempt [CI run 42169848988](https://github.com/Azazel5200/downhill-revived/actions/runs/42169848988)
+  stopped at `cargo fetch`: its initial download inherited the project's enforced
+  `[net] offline = true`, and could not find the locked `log` crate in a fresh cache.
+  The native host OS smoke had already passed. Limit the online override to `cargo fetch`;
+  do not weaken the subsequent offline renderer check.
 - The wider `rustgs_selftest.py` cannot finish on the current Linux scratch executor: its
   existing x64 Windows release-build step refuses without the LLVM `llvm-ar` executable.
   This is not evidence of a Rust ARM64 compile failure; the native runner is required.
