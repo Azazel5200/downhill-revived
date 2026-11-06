@@ -73,6 +73,13 @@ the actual game compiles, boots, runs at 60 fps or supports Spanish.
   `atomic_thread_fence` / `memory_order_seq_cst` undeclared in the Windows
   ARM64 VIF compile. Include the C11 atomic definitions explicitly ahead of
   SIMDe on the ARM64 VIF and VU paths. The next hosted build must verify it.
+- [x] Fourth integrated attempt, run 42215985852: SDL3 compiled in 107.2 s,
+  Rust staticlib in 180.3 s. The SIMDe atomic-fence error disappeared, and
+  `vu0_interp.c` reached its next native ARM64 compile error: Windows SDK
+  `rpcndr.h` defines `small` as a macro, colliding with two local vector-mask
+  variables. Rename only those locals to `subnormal_mask` with unchanged math.
+  For synthetic CI retries, compile the C fixture before the costly Rust
+  staticlib; real game builds retain their existing Rust-first ordering.
 - [ ] Hosted full synthetic ARM64 build succeeds.
 - [ ] Hosted headless synthetic/negative tests pass.
 - [ ] Real, unmodified European game core compiled and played on hardware
