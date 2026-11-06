@@ -1,6 +1,9 @@
 # 167 — Exercise the integrated Windows ARM64 host with a synthetic guest
 
-Status: in progress
+Status: current
+
+Synthetic ARM64 host integration **verified**; real European game core remains
+pending under finding 100.
 
 Branch `azazel/win-arm64-fake-host`, stacked on the European-disc preflight
 lane (finding 166), started 2026-11-06.
@@ -80,7 +83,15 @@ the actual game compiles, boots, runs at 60 fps or supports Spanish.
   variables. Rename only those locals to `subnormal_mask` with unchanged math.
   For synthetic CI retries, compile the C fixture before the costly Rust
   staticlib; real game builds retain their existing Rust-first ordering.
-- [ ] Hosted full synthetic ARM64 build succeeds.
-- [ ] Hosted headless synthetic/negative tests pass.
+- [x] Fifth integrated attempt, run 42217102692: **success**. The complete
+  Windows ARM64 host compiled 40 C host objects and 35 generated WASM imports,
+  linked SDL3 3.4.18 and the Rust renderer (wgpu 29.0.3) into an ARM64 PE
+  executable (3.1 MiB), exited normally (`host64 module exit: 0`) and passed
+  all 11 out-of-bounds/invalid indirect-call negative fixture tests. The PE
+  machine check confirmed the executable is native ARM64. C finished in 4.9 s
+  before Rust was built, validating the fake-C-first ordering. No retail ISO,
+  actual game executable, or GPU-based graphics benchmark was used.
+- [x] Hosted full synthetic ARM64 build succeeds.
+- [x] Hosted headless synthetic/negative tests pass.
 - [ ] Real, unmodified European game core compiled and played on hardware
   (separate long-running release-support work, requiring the owner's ISO).
