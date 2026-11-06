@@ -78,7 +78,15 @@ static NOINLINE void backtrace_ends(void) {
 #ifdef _WIN32
     int n=RtlCaptureStackBackTrace(0,64,frames,NULL);
 #if defined(_M_ARM64) || defined(__aarch64__)
-    if (n<2 || n>=64) fprintf(stderr,"Windows ARM64 backtrace returned %d frames\n",n);
+    if (n<2 || n>=64) {
+        uintptr_t fp=0; ULONG_PTR low=0,high=0;
+        __asm__ volatile("mov %0, x29" : "=r"(fp));
+        GetCurrentThreadStackLimits(&low,&high);
+        int fp_ok=fp>=low && fp+16<=high;
+        uintptr_t parent=fp_ok?*(const uintptr_t *)fp:0;
+        fprintf(stderr,"Windows ARM64 backtrace returned %d frames; x29 in stack=%d; "
+                "parent x29 in stack=%d\n",n,fp_ok,parent>=low && parent<high);
+    }
 #endif
 #else
     int n=backtrace(frames,64);
@@ -129,6 +137,10 @@ int main(int argc,char **argv) {
     }
     wasm_rt_memory_t memory={0};
     wasm_rt_allocate_memory(&memory,32768,32770,false,65536);
+#if defined(_WIN32) && (defined(_M_ARM64) || defined(__aarch64__))
+    fprintf(stderr,"Windows ARM64 root-thread backtrace probe\n");
+    backtrace_ends();
+#endif
     host64_fiber_bind(&stack_pointer); root=host_fiber_main(); CHECK(root==65);
     for (unsigned id=1;id<=FIBERS;id++) {
         fibers[id]=host_fiber_create(worker,(void *)(uintptr_t)id); CHECK(fibers[id]==id);

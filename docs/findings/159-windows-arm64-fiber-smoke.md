@@ -99,6 +99,10 @@ this lane or claim ARM64 portability based only on Python tests.
   links for reliable stack walking. The smoke compiler now explicitly uses
   `-fno-omit-frame-pointer` even under `/O2`; the subsequent native run must establish whether
   that resolves the trace or whether the synthetic fiber needs a stronger unwind boundary.
+- Retaining `x29` still yielded **one frame** in the native test. A narrowly scoped ARM64 test
+  probe now checks whether the ordinary root thread can produce a backtrace before switching,
+  and, if not, whether `x29` and its parent point within its reported stack bounds. This
+  distinguishes a general compiler/Windows tracing issue from a synthetic-fiber-only issue.
 
 ## Result
 
