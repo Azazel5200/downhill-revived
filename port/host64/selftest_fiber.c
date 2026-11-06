@@ -77,6 +77,9 @@ static NOINLINE void backtrace_ends(void) {
     void *frames[64];
 #ifdef _WIN32
     int n=RtlCaptureStackBackTrace(0,64,frames,NULL);
+#if defined(_M_ARM64) || defined(__aarch64__)
+    if (n<2 || n>=64) fprintf(stderr,"Windows ARM64 backtrace returned %d frames\n",n);
+#endif
 #else
     int n=backtrace(frames,64);
 #endif

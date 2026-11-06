@@ -39,8 +39,8 @@ this lane or claim ARM64 portability based only on Python tests.
   ARM64, then attempts the real 150-switch and two guard-fault runs without the user's laptop.
 - [ ] Collect and interpret the hosted ARM64 job's outcome; a queued or missing runner is not a
   passing test. Fix compiler errors in this lane before requesting on-device testing.
-- [ ] Compile/link the new adapter with native Windows ARM64 clang-cl, and inspect its ARM64
-  exception unwinding metadata.
+- [x] Compile/link the new adapter with native Windows ARM64 clang-cl on a hosted machine.
+- [ ] Inspect and validate its ARM64 exception unwinding metadata and stack walk.
 - [ ] Run the native selftest and both deliberate guard faults on Windows 11 ARM64 hardware.
 - [ ] Rerun the unchanged win-x64 fiber selftest and the full port tier in the correct environment.
 
@@ -87,8 +87,13 @@ this lane or claim ARM64 portability based only on Python tests.
   PowerShell **and Python** both received all three variables. Root cause: Python's Windows
   `os.environ` uppercases names, while the build passed `dict(os.environ, ...)` and then used
   case-sensitive mixed-case lookups. ARM64 path discovery now handles environment variable
-  names case-insensitively, with a regression test for uppercased keys. Compilation is still
-  unverified until the next hosted run.
+  names case-insensitively, with a regression test for uppercased keys.
+- The next hosted run **compiled and launched the ARM64 executable successfully**, including
+  stack bounds and the 256-KiB frame, but failed at `RtlCaptureStackBackTrace`'s minimum frame
+  count (selftest line 83). The switch assembly initially described only its stack allocation
+  in `.seh_*` unwind metadata, omitting the saved nonvolatile registers and LR. The next attempt
+  gives each save a corresponding ARM64 unwind directive and logs the actual frame count on
+  failure. The native switch, guard faults and full 150 rounds are **not yet validated**.
 
 ## Result
 
