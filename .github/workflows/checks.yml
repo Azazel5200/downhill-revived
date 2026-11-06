@@ -49,6 +49,26 @@ jobs:
         env:
           DHD_CI_ALLOW_C_OUTPUT: '1'
         run: ./port/tools/ci_win_host_smoke.ps1 -Arch x64
+  # SDL3 is the next dependency for a native ARM64 game. Build the same pinned static
+  # source that Windows x64 already uses and link/run an asset-free SDL_Init(0) smoke.
+  win-arm64-sdl3-smoke:
+    if: github.event_name == 'pull_request' && github.head_ref == 'azazel/win-arm64-sdl3-smoke'
+    runs-on: windows-11-vs2026-arm
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native ARM64 host and SDL3 build, link and startup smoke
+        shell: pwsh
+        env:
+          DHD_CI_ALLOW_C_OUTPUT: '1'
+        run: ./port/tools/ci_win_host_smoke.ps1 -Arch arm64 -SDL3
+      - name: Standalone native ARM64 SDL3 startup selftest (not the game)
+        uses: actions/upload-artifact@v4
+        with:
+          name: win-arm64-sdl3-selftest-not-game
+          path: build/host-sdl3-winarm64/selftest_win_sdl3.exe
+          if-no-files-found: error
+          retention-days: 7
   # The draft Windows ARM64 lane uses a free hosted ARM64 runner to test its small native
   # fiber/guard executable. No game disc, licensed assets, SDL3, renderer or secrets required.
   arm64-fiber-smoke:
