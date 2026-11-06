@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 import rustgs
+import check_rust_lib
 
 
 class WinArm64RustTargetTest(unittest.TestCase):
@@ -16,6 +17,8 @@ class WinArm64RustTargetTest(unittest.TestCase):
         self.assertNotIn(rustgs.WIN_ARM64, rustgs.ARCHIVE_TARGETS)
         self.assertEqual(rustgs.feature_args(rustgs.WIN_ARM64, []), ['--features', 'native'])
         self.assertIn('--target', rustgs.cargo_args(rustgs.WIN_ARM64, 'release'))
+        self.assertEqual(check_rust_lib.allowed_libs_file(rustgs.WIN_ARM64).name,
+                         'native-static-libs-aarch64-pc-windows-msvc.txt')
 
     def test_windows_arm64_ring_c_uses_clang_not_x64_msbuild(self):
         with tempfile.TemporaryDirectory() as tmp:

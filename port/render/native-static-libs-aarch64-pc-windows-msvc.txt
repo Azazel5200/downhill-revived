@@ -1,0 +1,6 @@
+# Windows ARM64 MSVC, Rust 1.97.1: rustc --print native-static-libs observed on the hosted
+# native ARM64 staticlib build (GitHub Actions run 42171855946). The Windows 0.52 import
+# library is emitted by the locked windows-targets graph; keep it target-specific.
+kernel32.lib ntdll.lib userenv.lib ws2_32.lib dbghelp.lib /defaultlib:libcmt
+bcrypt.lib advapi32.lib
+windows.0.52.0.lib

@@ -35,6 +35,7 @@ TOOLS = Path(__file__).resolve().parent
 ROOT = TOOLS.parents[1]
 ALLOWED_LIBS_FILE = ROOT / 'port' / 'render' / 'native-static-libs-x86_64.txt'
 ALLOWED_LIBS_FILES = {'aarch64-linux-android': ROOT / 'port' / 'render' / 'native-static-libs-aarch64-linux-android.txt',
+                      'aarch64-pc-windows-msvc': ROOT / 'port' / 'render' / 'native-static-libs-aarch64-pc-windows-msvc.txt',
                       'x86_64-unknown-linux-gnu': ROOT / 'port' / 'render' / 'native-static-libs-x86_64-unknown-linux-gnu.txt',
                       'aarch64-apple-darwin': ROOT / 'port' / 'render' / 'native-static-libs-aarch64-apple-darwin.txt'}
 DYNAMIC_CRT = re.compile(rb'[/-]defaultlib:\s*"?msvcrt', re.I)

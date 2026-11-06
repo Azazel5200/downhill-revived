@@ -857,7 +857,7 @@ def build(triple, features=(), profile='release', no_cache=False, crate=RENDER_C
     else:
         lib = out_dir / lib_name
         shutil.copyfile(raw, lib)
-        renamed = normalise_objnames(lib, tdir) if triple == X64 else 0  # COFF's records only
+        renamed = normalise_objnames(lib, tdir) if triple in (X64, WIN_ARM64) else 0  # COFF's records only
         if renamed:
             log('%d S_OBJNAME record(s) normalised to target\\...' % renamed)
         foreign = normalise_foreign_roots(lib) if triple == X64 else 0
