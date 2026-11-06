@@ -193,6 +193,7 @@ out of date). New findings: copy `TEMPLATE.md` to the next free number on the la
 | 162 | [Windows ARM64 Rust/wgpu renderer compile preflight](162-windows-arm64-rust-renderer-check.md) | in progress |  |
 | 163 | [Windows ARM64 Rust/wgpu static library build and archive validation](163-windows-arm64-rust-staticlib.md) | in progress |  |
 | 164 | [Windows ARM64 C host to Rust renderer: isolated ABI link smoke](164-windows-arm64-rust-c-abi-link.md) | in progress |  |
+| 165 | [Route the unified Windows game host build to ARM64](165-windows-arm64-unified-host-routing.md) | in progress |  |
 | 075 | no file: the portable-core plan was numbered 075 on its branch and merged as 081 | renumbered | see 081 |
 | 113 | no file: the delta-time clock work was numbered 113 on its branch; the mixer's VBLANK time is in 139 | renumbered | see 139 |
 <!-- index:end -->

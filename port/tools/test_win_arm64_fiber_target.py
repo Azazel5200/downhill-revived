@@ -75,13 +75,16 @@ class WindowsArm64FiberTargetTests(unittest.TestCase):
             upper_env = {name.upper(): value for name, value in env.items()}
             self.assertEqual(builder.windows_arm64_paths(upper_env), (msvc, sdk, version))
 
-    def test_full_game_request_fails_closed(self):
+    def test_arm64_full_host_requires_windows(self):
         script = Path(builder.__file__).resolve()
         result = subprocess.run([sys.executable, '-B', str(script), '--target', 'win-arm64'],
                                 cwd=builder.ROOT, capture_output=True, text=True,
                                 env={**os.environ, 'DHD_BUILD_SLOTS': '0'}, timeout=20)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn('experimental --fiber-test only', result.stderr)
+        if os.name != 'nt':
+            self.assertIn('win-arm64 must build on Windows', result.stderr)
+        else:
+            self.assertIn('no module given', result.stderr)
 
     def test_x64_regression_uses_its_own_developer_libraries(self):
         with tempfile.TemporaryDirectory() as folder:

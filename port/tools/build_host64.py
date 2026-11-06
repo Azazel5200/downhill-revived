@@ -5,8 +5,10 @@
     python3 port/tools/build_host64.py --target linux-x64 MODULE                 # Linux or WSL: dhd64 (ELF)
     python3 port/tools/build_host64.py --target macos-arm64 MODULE               # a Mac: dhd64 (Mach-O)
     python port/tools/build_host64.py --target android-arm64 MODULE --jobs 2     # libmain.so (finding 091)
+    python port/tools/build_host64.py [--target T] --fake                        # no-disc Windows fixture
     python port/tools/build_host64.py [--target T] --fiber-test                  # the EE fibers alone
-    python port/tools/build_host64.py --target win-arm64 --fiber-test             # ARM64 smoke ONLY
+    python port/tools/build_host64.py --target win-arm64 --fiber-test             # native ARM64 fiber smoke
+    python port/tools/build_host64.py --target win-arm64 MODULE                   # experimental ARM64 host
 
 MODULE is a .wasm or WABT .c units (module name must be core; a Mac without wasm2c takes the C that
 wasm2c wrote elsewhere, with --wabt naming a folder that holds WABT's include/ and share/). --fake
@@ -81,7 +83,7 @@ MAC_MIN = '11.0'  # the first macOS on Apple silicon (package_release.py's LSMin
 ANDROID_API = 30  # sdl3.ANDROID_API: Android 11
 TARGETS = {t.key: t for t in (
     Target('win-x64', 'x86_64-pc-windows-msvc', 'build/host64-exe', 'dhd64.exe', 'win64'),
-    # Only --fiber-test is implemented: SDL3, Rust and the game executable still target win-x64.
+    # Windows ARM64 shares the whole host with win-x64; its game link is not yet hardware-validated.
     Target('win-arm64', 'aarch64-pc-windows-msvc', 'build/host64-winarm64', 'dhd64.exe', 'winarm64'),
     Target('linux-x64', 'x86_64-unknown-linux-gnu', 'build/host64-linux', 'dhd64', 'sysv64',
            flags=['-march=x86-64-v2', '-fPIC'], wabt='/opt/wabt', simde='/opt/simde-src'),
@@ -129,7 +131,7 @@ def windows_developer_paths(env, arch):
     needed = ('VCToolsInstallDir', 'WindowsSdkDir', 'WindowsSDKVersion')
     missing = [name for name in needed if not env_ci.get(name.casefold())]
     if missing:
-        raise RuntimeError('Windows %s fiber smoke requires a %s VS developer shell: ' %
+        raise RuntimeError('Windows %s build requires a %s VS developer shell: ' %
                            (arch, arch) +
                            'missing ' + ', '.join(missing))
     msvc, sdk = Path(env_ci['vctoolsinstalldir']), Path(env_ci['windowssdkdir'])
@@ -139,7 +141,7 @@ def windows_developer_paths(env, arch):
              sdk/'Lib'/version/'ucrt'/arch, sdk/'Lib'/version/'um'/arch]
     missing = [str(path) for path in paths if not path.is_dir()]
     if missing:
-        raise RuntimeError('Windows %s fiber smoke: missing %s compiler/SDK paths:\n' %
+        raise RuntimeError('Windows %s build: missing %s compiler/SDK paths:\n' %
                            (arch, arch) +
                            '\n'.join(missing))
     return msvc, sdk, version
@@ -148,6 +150,59 @@ def windows_developer_paths(env, arch):
 def windows_arm64_paths(env):
     """Keep the native ARM64 preflight contract explicit: x64 libraries never qualify."""
     return windows_developer_paths(env, 'arm64')
+
+
+def windows_host_toolchain(t, env):
+    """Keep x64's historical defaults while requiring real ARM64 developer libraries."""
+    if t.key == 'win-arm64':
+        msvc, sdk, version = windows_arm64_paths(env)
+        return msvc, sdk, version, 'arm64'
+    if t.key != 'win-x64':
+        raise ValueError('not a Windows host target: ' + t.key)
+    return MSVC, SDK, VERSION, 'x64'
+
+
+def windows_host_common(t, a, defines, includes, prefix_maps, env):
+    """Shared game C compile command; no x64 codegen flags can enter ARM64."""
+    msvc, sdk, version, arch = windows_host_toolchain(t, env)
+    flags = [a.llvm/'clang-cl.exe', '--target='+t.rust, '/nologo',
+             '/O2', '/clang:-O3']
+    if arch == 'x64':
+        flags += ['/clang:-march=x86-64-v2', '/clang:-mtune=znver3']
+    else:
+        # ARM64 unwinding and fiber backtraces must retain the native frame chain.
+        flags += ['/clang:-fno-omit-frame-pointer']
+    flags += ['/clang:-ffp-model=strict', '/clang:-ffp-contract=off',
+              '/clang:-ftrivial-auto-var-init=zero', '/clang:-fno-strict-aliasing',
+              '/clang:-fwrapv', '/Gy', '/Gw', '/MT', '/w', *defines, *includes,
+              '/imsvc'+str(msvc/'include')]
+    flags += ['/imsvc'+str(sdk/'Include'/version/x) for x in ('ucrt','um','shared')]
+    flags += ['/clang:' + m for m in prefix_maps]
+    if a.debug:
+        flags += ['/clang:-gline-tables-only', '/clang:-gcodeview']
+    return flags
+
+
+def windows_host_link(t, a, out, exe, rsp, env, report):
+    """Select the native Windows linker/SDK and Rust's exact ARM64 import library."""
+    msvc, sdk, version, arch = windows_host_toolchain(t, env)
+    cmd = [a.llvm/'lld-link.exe', '@'+str(rsp), '/out:'+str(exe),
+           '/libpath:'+str(msvc/'lib'/arch),
+           '/libpath:'+str(sdk/'Lib'/version/'ucrt'/arch),
+           '/libpath:'+str(sdk/'Lib'/version/'um'/arch),
+           '/subsystem:windows', '/entry:mainCRTStartup', '/opt:ref', '/opt:icf',
+           '/dynamicbase', '/nxcompat', '/map:'+str(out/'dhd64.map'), '/errorlimit:0']
+    if arch == 'arm64':
+        # The Rust library's Windows import archive is in Cargo, not the SDK.
+        # Use the same COFF-checked resolver as the passing C/Rust ARM64 ABI smoke.
+        from build_win_rust_abi_smoke import cargo_windows_import_paths
+        if not env.get('CARGO_HOME'):
+            raise RuntimeError('Windows ARM64 Rust link requires CARGO_HOME')
+        cmd += ['/machine:arm64', *cargo_windows_import_paths(env['CARGO_HOME'],
+                                                              report['native_static_libs'])]
+    if a.debug:
+        cmd += ['/debug', '/pdb:'+str(out/'dhd64.pdb')]
+    return cmd
 
 
 def windows_fiber_command(t, a, wabt, out, exe, sources, flags, env):
@@ -266,7 +321,7 @@ def sdl(t, a):
     if a.sdl_lib and not a.sdl_include:
         raise ValueError('--sdl-lib needs --sdl-include')
     if t.windows:
-        lib, include = (a.sdl_lib, a.sdl_include) if a.sdl_lib else sdl3.build()
+        lib, include = (a.sdl_lib, a.sdl_include) if a.sdl_lib else sdl3.build(t.rust)
         libs = list(sdl3.SYSTEM_LIBS)
     elif a.sdl_lib and a.sdl_libs is not None:
         lib, include, libs = a.sdl_lib, a.sdl_include, []
@@ -299,7 +354,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     p.add_argument('module', type=Path, nargs='*')
     p.add_argument('--target', choices=sorted(TARGETS), default='win-x64')
-    p.add_argument('--fake', action='store_true', help='the integration fixture (win-x64)')
+    p.add_argument('--fake', action='store_true', help='the asset-free Windows host integration fixture')
     p.add_argument('--run', action='store_true', help='bounded headless execution (not android-arm64)')
     p.add_argument('--fiber-test', action='store_true',
                    help="build and run port/host64/selftest_fiber.c with the target's fiber switch (no module)")
@@ -330,10 +385,8 @@ def main():
     a = p.parse_args()
     t = TARGETS[a.target]
     if t.key == 'win-arm64':
-        if not a.fiber_test or a.fake or a.module:
-            p.error('win-arm64 is an experimental --fiber-test only; full game/SDL3/Rust builds are not implemented')
         if os.name != 'nt':
-            p.error('win-arm64 --fiber-test must run on Windows with ARM64 MSVC and Windows SDK libraries')
+            p.error('win-arm64 must build on Windows with ARM64 MSVC and Windows SDK libraries')
     if not a.fiber_test and not a.fake and not a.module:
         # no module named: build_wasm.py's output (port/tools/build.py builds both in order)
         default = ROOT / 'build' / 'wasm' / 'dhd_core.wasm'
@@ -344,7 +397,7 @@ def main():
     if not a.fiber_test and bool(a.module) == a.fake:
         p.error('provide --fake or one .wasm / a set of wasm2c .c files')
     if a.fake and not t.windows:
-        p.error('--fake builds the win-x64 fixture')
+        p.error('--fake builds the Windows host fixture')
     if t.windows and (a.pgo_generate or a.pgo_use):
         p.error('--pgo-* are for the clang targets')
     jobs, outputs = a.jobs or t.jobs, a.num_outputs or t.outputs
@@ -352,13 +405,13 @@ def main():
     simde = a.simde or Path(os.environ.get('SIMDE_DIR') or t.simde or str(DEVCACHES / 'simde-src'))
     out = (a.out or ROOT / t.out).resolve()
     # GitHub-hosted Windows runners have an ephemeral C: workspace. Only the
-    # ARM64 fiber CI smoke test may opt into that runner-local exception;
+    # ARM64 hosted CI smoke/build may opt into that runner-local exception;
     # ordinary builds (including the user's laptop) still reject C:.
-    hosted_ci_fiber = (a.fiber_test and t.windows
-                       and os.environ.get('GITHUB_ACTIONS') == 'true'
-                       and os.environ.get('RUNNER_ENVIRONMENT') == 'github-hosted'
-                       and os.environ.get('DHD_CI_ALLOW_C_OUTPUT') == '1')
-    if (out.drive.upper() == 'C:' or str(out).startswith('/mnt/c/')) and not hosted_ci_fiber:
+    hosted_ci_windows = (t.windows
+                         and os.environ.get('GITHUB_ACTIONS') == 'true'
+                         and os.environ.get('RUNNER_ENVIRONMENT') == 'github-hosted'
+                         and os.environ.get('DHD_CI_ALLOW_C_OUTPUT') == '1')
+    if (out.drive.upper() == 'C:' or str(out).startswith('/mnt/c/')) and not hosted_ci_windows:
         p.error('build output must stay off C:')
     work = out / 'work' if t.android else out  # Android: out holds the APK's libraries only
     scratch = work / 'tmp'
@@ -506,16 +559,7 @@ def main():
             profile.write_bytes(data)
             pgo_flags = ['-fprofile-use=' + str(profile)]
         if t.windows:
-            common = [a.llvm/'clang-cl.exe', '--target=x86_64-pc-windows-msvc', '/nologo',
-                      '/O2', '/clang:-O3', '/clang:-march=x86-64-v2', '/clang:-mtune=znver3',
-                      '/clang:-ffp-model=strict', '/clang:-ffp-contract=off',
-                      '/clang:-ftrivial-auto-var-init=zero', '/clang:-fno-strict-aliasing',
-                      '/clang:-fwrapv', '/Gy', '/Gw', '/MT', '/w', *defines, *includes,
-                      '/imsvc'+str(MSVC/'include')]
-            common += ['/imsvc'+str(SDK/'Include'/VERSION/x) for x in ('ucrt','um','shared')]
-            common += ['/clang:' + m for m in prefix_maps]
-            if a.debug:
-                common += ['/clang:-gline-tables-only', '/clang:-gcodeview']
+            common = windows_host_common(t, a, defines, includes, prefix_maps, env)
         else:
             # one section per function and datum, as the Windows build's /Gy: the link
             # garbage-collects what nothing references (/opt:ref there)
@@ -530,7 +574,7 @@ def main():
             source = Path(source)
             rel = source.relative_to(ROOT).as_posix() if source.is_relative_to(ROOT) else source.name
             extra = ['-I'+str(Path(sdl_include).resolve())] if rel.startswith('port/') else []  # threads, locks, timers
-            if rel.endswith('vu0_interp.c'):
+            if rel.endswith('vu0_interp.c') and not a.fake:
                 extra += ['-DPS2_VU_AOT']
             if rel.endswith('gs/gpu_rust.c'):
                 extra += ['-I'+str(ROOT/'port/render/include')]  # dhd_render.h
@@ -544,10 +588,11 @@ def main():
             objcache.compile(list(map(str, cmd)), str(obj), lambda c: run(c, timeout=timeout) and None,
                              roots=[(work, 'out')], cwd=work, env=env, hit='')
             return obj
-        # VU1's straight-line blocks as C (vu1_aot.inc and vu1_native_clip.inc, from the game's
-        # .vutext: DHD_VUTEXT or assets/vutext.bin); vu0_interp.c runs them
-        import vu1_aot
-        vu1_aot.generate(work/'vu1_aot.inc')
+        # Only a real game build can translate retail microcode. The deliberately asset-free
+        # fake fixture uses the interpreter and requires neither an ISO nor .vutext.
+        if not a.fake:
+            import vu1_aot
+            vu1_aot.generate(work/'vu1_aot.inc')
         # the window's icon where the program carries none of its own (present.c's window_icon)
         icon = (ROOT/'port/res/icon.png').read_bytes()
         (work/'dhd_icon.inc').write_text('static const unsigned char dhd_icon_png[] = {%s};\n' % ','.join(map(str, icon)))
@@ -594,14 +639,8 @@ def main():
             run([a.llvm/'llvm-rc.exe', '/fo', str(res), str(ROOT/'port/res/dhd.rc')])
             rsp = work/'link.rsp'
             rsp.write_text('\n'.join('"'+str(x)+'"' for x in objects+[library,res]+libs))
-            link = [a.llvm/'lld-link.exe', '@'+str(rsp), '/out:'+str(exe),
-                    '/libpath:'+str(MSVC/'lib/x64'),
-                    '/libpath:'+str(SDK/'Lib'/VERSION/'ucrt/x64'),
-                    '/libpath:'+str(SDK/'Lib'/VERSION/'um/x64'),
-                    '/subsystem:windows','/entry:mainCRTStartup','/opt:ref','/opt:icf','/dynamicbase','/nxcompat',  # windowed: no console on a double-click, the log goes to dhd.log (host_console_init)
-                    '/map:'+str(out/'dhd64.map'), '/errorlimit:0']
-            if a.debug:
-                link += ['/debug', '/pdb:'+str(out/'dhd64.pdb')]
+            # Windowed: no console on double-click; logs go to dhd.log.
+            link = windows_host_link(t, a, out, exe, rsp, env, report)
             (work/'link.log').write_text(run(link))
         elif t.android:
             exports_map = work/'exports.map'

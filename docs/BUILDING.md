@@ -97,10 +97,9 @@ game has no disc dialog of its own; for players the launcher picks the disc (fin
 
 ### Experimental Windows ARM64 fiber smoke (not the game)
 
-`port/tools/build_host64.py --target win-arm64` currently supports **only** `--fiber-test`.
-It compiles the small Windows ARM64 guest-memory and EE-fiber selftest with the native Windows
-ARM64 switch adapter. It does **not** compile the game, SDL3 or the Rust renderer; do not pass a
-disc or wasm module to this command. The isolated test now passes on GitHub's native Windows
+`port/tools/build_host64.py --target win-arm64 --fiber-test` compiles the small Windows
+ARM64 guest-memory and EE-fiber selftest with the native Windows ARM64 switch adapter.
+It does **not** compile the game, SDL3 or the Rust renderer. The isolated test passes on GitHub's native Windows
 ARM64 hosted runner. The hosted executable's normal 150-switch and stack-walk run also passes
 on the user's own ARM64 laptop; local guard-fault runs and local compilation are still pending
 (finding 159). This is not a supported release target.
@@ -122,6 +121,17 @@ checkout; installing Visual Studio itself is not controlled by this command.
 The smaller offline routing tests run without LLVM, MSVC, an SDK or the game disc:
 
     python -B -m unittest discover -s port/tools -p test_win_arm64_fiber_target.py -v
+    python -B -m unittest discover -s port/tools -p test_win_arm64_host_routing.py -v
+
+The experimental `build_host64.py --target win-arm64 MODULE` route now selects
+native ARM64 compile flags, SDK libraries, SDL3, Rust and final linker for the
+**same shared host** (finding 165). This full build is **not yet verified**; only
+its no-disc architecture-routing tests have passed. A real run needs the locally
+built WASM game core and VU microcode from a supported disc, not the hosted CI
+selftests. **The upstream game core currently accepts only the USA release**;
+the European multilang/Spanish disc has a different code/data image and still
+requires separate release support (finding 100). Never publish a user's ISO,
+extracted game assets or generated licensed core.
 
 Passing those Python tests alone does **not** demonstrate that ARM64 assembly compiles, links or
 runs. The native `arm64-fiber-smoke` GitHub Actions job separately verifies those properties
