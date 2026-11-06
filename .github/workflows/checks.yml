@@ -18,3 +18,50 @@ jobs:
         run: python tools/check_tree.py
       - name: docs linter (findings, citations, paths)
         run: python tools/check_docs.py
+  # The draft Windows ARM64 lane uses a free hosted ARM64 runner to test its small native
+  # fiber/guard executable. No game disc, licensed assets, SDL3, renderer or secrets required.
+  arm64-fiber-smoke:
+    if: github.event_name == 'pull_request' && github.head_ref == 'azazel/win-arm64-fiber-smoke'
+    runs-on: windows-11-vs2026-arm
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get WABT runtime headers (1.0.42)
+        shell: pwsh
+        run: |
+          $src = Join-Path $env:GITHUB_WORKSPACE 'build/wabt-src'
+          $dst = Join-Path $env:GITHUB_WORKSPACE 'build/wabt/include'
+          git clone --depth 1 --branch 1.0.42 https://github.com/WebAssembly/wabt.git $src
+          if ($LASTEXITCODE -ne 0) { throw 'Could not fetch WABT 1.0.42' }
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          Copy-Item (Join-Path $src 'wasm2c/*.h') -Destination $dst
+          if (!(Test-Path (Join-Path $dst 'wasm-rt.h'))) { throw 'Missing WABT runtime header' }
+      - name: Native Windows ARM64 fiber and both guard-fault checks
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          if (!(Test-Path $vswhere)) { throw 'vswhere.exe is unavailable' }
+          $vs = & $vswhere -latest -products '*' -property installationPath
+          if ($LASTEXITCODE -ne 0 -or !$vs) { throw 'No Visual Studio installation found' }
+          $dev = Join-Path $vs 'Common7/Tools/VsDevCmd.bat'
+          if (!(Test-Path $dev)) { throw 'Visual Studio developer environment is missing' }
+          $setCmd = 'call "' + $dev + '" -no_logo -arch=arm64 -host_arch=arm64 >nul && set'
+          $rows = & $env:ComSpec /d /s /c $setCmd
+          if ($LASTEXITCODE -ne 0) { throw 'ARM64 VS developer environment failed' }
+          foreach ($row in $rows) {
+            if ($row -match '^([^=]+)=(.*)$') {
+              [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2], 'Process')
+            }
+          }
+          $clang = Get-Command clang-cl.exe -ErrorAction SilentlyContinue
+          if ($clang) { $llvmBin = Split-Path $clang.Source }
+          else {
+            $candidate = Get-ChildItem (Join-Path $vs 'VC/Tools/Llvm') -Filter clang-cl.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if (!$candidate) { throw 'clang-cl.exe is unavailable' }
+            $llvmBin = $candidate.DirectoryName
+          }
+          if (!(Test-Path (Join-Path $llvmBin 'lld-link.exe'))) { throw 'lld-link.exe is unavailable' }
+          python -B -m unittest discover -s port/tools -p test_win_arm64_fiber_target.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Offline ARM64 routing tests failed' }
+          python -B port/tools/build_host64.py --target win-arm64 --fiber-test --llvm $llvmBin --wabt (Join-Path $env:GITHUB_WORKSPACE 'build/wabt')
+          if ($LASTEXITCODE -ne 0) { throw 'Native ARM64 fiber smoke failed' }

@@ -34,6 +34,11 @@ this lane or claim ARM64 portability based only on Python tests.
 - [x] 2026-11-06: route only `--fiber-test` through `--target win-arm64`; fail closed for the
   game/renderer; select ARM64 MSVC/Windows SDK library directories from the VS developer shell;
   add offline command-routing and x64-library rejection tests.
+- [x] 2026-11-06: add an opt-in `windows-11-vs2026-arm` GitHub Actions job for this draft PR
+  only. It provisions WABT headers in its ephemeral workspace, discovers LLVM and Visual Studio
+  ARM64, then attempts the real 150-switch and two guard-fault runs without the user's laptop.
+- [ ] Collect and interpret the hosted ARM64 job's outcome; a queued or missing runner is not a
+  passing test. Fix compiler errors in this lane before requesting on-device testing.
 - [ ] Compile/link the new adapter with native Windows ARM64 clang-cl, and inspect its ARM64
   exception unwinding metadata.
 - [ ] Run the native selftest and both deliberate guard faults on Windows 11 ARM64 hardware.
@@ -65,6 +70,9 @@ this lane or claim ARM64 portability based only on Python tests.
   https://learn.microsoft.com/en-us/cpp/build/building-on-the-command-line.
 - No native Windows ARM64 compiler or SDK is available in the Linux editing environment;
   syntax/unit/document checks here cannot execute an ARM64 machine-code test.
+- GitHub offers native Windows 11 ARM64 hosted runners for public repositories, including a
+  Visual Studio 2026 image. This can catch compiler and runtime failures before involving a
+  player's machine: https://github.blog/changelog/2026-08-20-windows-11-arm64-vs2026-image-generally-available/.
 
 ## Result
 
