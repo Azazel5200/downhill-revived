@@ -1,5 +1,5 @@
 # Native GitHub runner only: configure the target VS/SDK compiler and run the host OS smoke.
-param([ValidateSet('arm64', 'x64')][string]$Arch)
+param([ValidateSet('arm64', 'x64')][string]$Arch, [switch]$SDL3)
 $ErrorActionPreference = 'Stop'
 $expected = if ($Arch -eq 'arm64') { 'ARM64' } else { 'AMD64' }
 if ($env:PROCESSOR_ARCHITECTURE -ne $expected) { throw "Expected native $expected runner" }
@@ -53,3 +53,13 @@ python -B -m unittest discover -s port/tools -p test_win_host_os_smoke.py -v
 if ($LASTEXITCODE -ne 0) { throw 'Offline Windows host smoke routing failed' }
 python -B port/tools/build_win_host_smoke.py --arch $Arch --llvm $llvmBin
 if ($LASTEXITCODE -ne 0) { throw 'Native Windows host smoke failed' }
+if ($SDL3) {
+    if ($Arch -ne 'arm64') { throw 'The SDL3 preflight is for native ARM64 only' }
+    $env:DHD_DEVCACHES = Join-Path $env:GITHUB_WORKSPACE 'build/development-cache'
+    python -m pip install --disable-pip-version-check ninja
+    if ($LASTEXITCODE -ne 0) { throw 'Python ninja package unavailable' }
+    # CMake uses clang.exe, not clang-cl.exe; both must be in the same selected toolchain.
+    $env:PATH = $llvmBin + [IO.Path]::PathSeparator + $env:PATH
+    python -B port/tools/build_win_sdl_smoke.py --llvm $llvmBin
+    if ($LASTEXITCODE -ne 0) { throw 'Native Windows ARM64 SDL3 build or smoke failed' }
+}
