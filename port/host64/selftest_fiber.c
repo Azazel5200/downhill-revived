@@ -33,6 +33,7 @@ static uint32_t stack_pointer=0x100000;
 static HostFiber root, fibers[FIBERS+1];
 static unsigned switches, finished, children;
 static unsigned arm64_backtrace_failures;
+static unsigned arm64_backtrace_fallbacks;
 static int mode;  /* 1: --guest-guard, 2: --native-guard */
 
 static uint64_t fp_control(void) {
@@ -74,30 +75,52 @@ static NOINLINE void large_frame(void) {
     volatile char big[256*1024];
     big[0]=1; big[sizeof big-1]=2; CHECK(big[0]+big[sizeof big-1]==3);
 }
+#if defined(_WIN32) && (defined(_M_ARM64) || defined(__aarch64__))
+/* Windows' RtlCaptureStackBackTrace may return just one frame even on the ordinary root
+   thread. Independently walk the OS's ARM64 .pdata/.xdata unwind information, as the fault
+   reporter in guest_memory_win32.c does. Stop within the current TEB stack's limits: never
+   chase a synthetic fiber past its separate stack into an unrelated root stack. */
+static NOINLINE int arm64_virtual_backtrace(void **frames,int capacity) {
+    CONTEXT context;
+    RtlCaptureContext(&context);
+    ULONG_PTR low=0,high=0;
+    GetCurrentThreadStackLimits(&low,&high);
+    int n=0;
+    while (n<capacity) {
+        DWORD64 pc=context.Pc, sp=context.Sp;
+        if (!pc || sp<low || sp>=high || (sp&15)) break;
+        frames[n++]=(void *)(uintptr_t)pc;
+        DWORD64 image=0;
+        PRUNTIME_FUNCTION entry=RtlLookupFunctionEntry(pc,&image,NULL);
+        if (!entry) break;  /* no unwind metadata: do not guess a return address */
+        void *handler_data=NULL;
+        DWORD64 establisher=0;
+        RtlVirtualUnwind(UNW_FLAG_NHANDLER,image,pc,entry,&context,
+                         &handler_data,&establisher,NULL);
+        if (context.Pc==pc || context.Sp<sp) break;  /* avoid loops or a downward walk */
+    }
+    return n;
+}
+#endif
 static NOINLINE void backtrace_ends(void) {
     void *frames[64];
 #ifdef _WIN32
     int n=RtlCaptureStackBackTrace(0,64,frames,NULL);
 #if defined(_M_ARM64) || defined(__aarch64__)
     if (n<2 || n>=64) {
-        uintptr_t fp=0; ULONG_PTR low=0,high=0;
-        __asm__ volatile("mov %0, x29" : "=r"(fp));
-        GetCurrentThreadStackLimits(&low,&high);
-        int fp_ok=fp>=low && fp+16<=high;
-        uintptr_t parent=fp_ok?*(const uintptr_t *)fp:0;
-        fprintf(stderr,"Windows ARM64 backtrace returned %d frames; x29=%p, bounds=[%p,%p), "
-                "parent x29 in stack=%d\n",n,(void *)fp,(void *)low,(void *)high,
-                parent>=low && parent<high);
+        int walked=arm64_virtual_backtrace(frames,64);
+        fprintf(stderr,"Windows ARM64 stack walk: RtlCaptureStackBackTrace=%d, "
+                "RtlVirtualUnwind=%d frames\n",n,walked);
+        if (walked>=2 && walked<64) ++arm64_backtrace_fallbacks;
+        else ++arm64_backtrace_failures;
     }
 #endif
 #else
     int n=backtrace(frames,64);
 #endif
 #if defined(_WIN32) && (defined(_M_ARM64) || defined(__aarch64__))
-    /* The hosted Windows ARM64 root thread itself currently reports one frame.
-       Record the failure and keep probing the independent fiber invariants;
-       the final result remains FAILED until stack walking is resolved. */
-    if (n<2 || n>=64) ++arm64_backtrace_failures;
+    /* A short Windows fast-path trace is accepted only if the independently bounded
+       OS unwind-metadata walk yields at least two frames on that same stack. */
 #else
     CHECK(n>=2 && n<64);
 #endif
@@ -205,9 +228,11 @@ int main(int argc,char **argv) {
            "depth; a fiber from a fiber; a large frame; 64 slots, reuse, ranges "
            "(backtrace checked separately)\n",switches);
     if (arm64_backtrace_failures) {
-        fprintf(stderr,"FAIL: ARM64 backtrace below two frames in %u checks\n",arm64_backtrace_failures);
+        fprintf(stderr,"FAIL: ARM64 stack walk below two frames in %u checks\n",arm64_backtrace_failures);
         return 3;
     }
+    printf("PASS: ARM64 stack traces: %u bounded RtlVirtualUnwind fallbacks\n",
+           arm64_backtrace_fallbacks);
 #else
     printf("PASS: fibers: %u switches keep registers, FP control, __stack_pointer and depth; a fiber "
            "from a fiber; a large frame; a backtrace; 64 slots, reuse, ranges\n",switches);

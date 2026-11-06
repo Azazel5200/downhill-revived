@@ -146,6 +146,19 @@ this lane or claim ARM64 portability based only on Python tests.
   the intended backtrace-diagnostic status. Both independent probe processes also returned 3,
   and both guard children still faulted as expected. **No abnormal shutdown is observed**;
   the only remaining failed selftest invariant is the short one-frame Windows ARM64 stack walk.
+- Microsoft's `RtlVirtualUnwind` reconstructs the calling context using OS unwind tables,
+  independently of `RtlCaptureStackBackTrace`'s fast path. The port's Windows fault reporter
+  already uses `RtlLookupFunctionEntry` and `RtlVirtualUnwind` on both x64 and ARM64. Add an
+  ARM64-only fallback to the fiber selftest: capture a `CONTEXT`, walk through unwind metadata,
+  require at least two frames, and stop at the **current** thread/fiber stack's reported bounds
+  without inventing an LR-only caller when unwind metadata is unavailable. This remains an
+  experimental change pending native CI evidence; do not mark the backtrace check green merely
+  because the 150 context switches passed. Reference:
+  https://learn.microsoft.com/en-us/windows/win32/api/winnt/nf-winnt-rtlvirtualunwind
+- Microsoft's STL maintainers separately document sporadic `RtlCaptureStackBackTrace` failures;
+  the issue discusses the independently captured-context/unwind-table approach. It does not
+  establish the cause of this **specific** Windows ARM64 runner's one-frame result:
+  https://github.com/microsoft/STL/issues/3889.
 
 ## Result
 
