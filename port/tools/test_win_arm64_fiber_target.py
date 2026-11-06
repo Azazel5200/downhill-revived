@@ -57,7 +57,9 @@ class WindowsArm64FiberTargetTests(unittest.TestCase):
             args = SimpleNamespace(llvm=llvm)
             cmd = builder.windows_fiber_command(target, args, root, root, root/'test.exe',
                                                 [Path('selftest.c')], ['-DWASM_RT_STACK_DEPTH_COUNT=1'], env)
-            text = ' '.join(map(str, cmd)).lower()
+            # Windows pathlib renders local paths with backslashes; compare
+            # portable slash-normalized command text on every CI host.
+            text = ' '.join(map(str, cmd)).replace('\\', '/').lower()
             self.assertIn('--target=aarch64-pc-windows-msvc', text)
             self.assertIn('-fuse-ld=lld', text)
             self.assertIn('/lib/arm64', text)
