@@ -141,6 +141,10 @@ int main(int argc,char **argv) {
 #if defined(_WIN32) && (defined(_M_ARM64) || defined(__aarch64__))
     /* Isolate an ordinary CRT return from the post-fiber shutdown path. */
     if (argc==2 && !strcmp(argv[1],"--exit-probe")) return 3;
+    if (argc==2 && !strcmp(argv[1],"--trace-exit-probe")) {
+        backtrace_ends();
+        return 3;
+    }
 #endif
     if (argc==2) mode=!strcmp(argv[1],"--guest-guard") ? 1 : !strcmp(argv[1],"--native-guard") ? 2 : -1;
     CHECK(mode>=0);
@@ -151,6 +155,11 @@ int main(int argc,char **argv) {
     wasm_rt_memory_t memory={0};
     wasm_rt_allocate_memory(&memory,32768,32770,false,65536);
 #if defined(_WIN32) && (defined(_M_ARM64) || defined(__aarch64__))
+    uintptr_t root_teb=(uintptr_t)NtCurrentTeb();
+    void *root_dealloc=*(void **)(root_teb+0x1478);
+    void *root_fiber_data=((NT_TIB *)root_teb)->FiberData;
+    ULONG_PTR root_low,root_high;
+    GetCurrentThreadStackLimits(&root_low,&root_high);
     fprintf(stderr,"Windows ARM64 root-thread backtrace probe\n");
     stack_bounds(0);
     backtrace_ends();
@@ -183,6 +192,14 @@ int main(int argc,char **argv) {
     host_fiber_delete(slots[5]); CHECK(host_fiber_create(noop,NULL)==slots[5]);
     host64_fiber_shutdown(); CHECK(!host64_fiber_id());
     wasm_rt_free_memory(&memory);
+#if defined(_WIN32) && (defined(_M_ARM64) || defined(__aarch64__))
+    ULONG_PTR after_low,after_high;
+    GetCurrentThreadStackLimits(&after_low,&after_high);
+    CHECK((uintptr_t)NtCurrentTeb()==root_teb);
+    CHECK(after_low==root_low && after_high==root_high);
+    CHECK(*(void **)(root_teb+0x1478)==root_dealloc);
+    CHECK(((NT_TIB *)root_teb)->FiberData==root_fiber_data);
+#endif
 #if defined(_WIN32) && (defined(_M_ARM64) || defined(__aarch64__))
     printf("PASS: ARM64 core fibers: %u switches keep registers, FP control, __stack_pointer and "
            "depth; a fiber from a fiber; a large frame; 64 slots, reuse, ranges "

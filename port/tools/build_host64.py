@@ -191,13 +191,14 @@ def fiber_test(t, a, cc, wabt, out, env):
         print('PASS: built %s (run it on a device: adb push, then --guest-guard and --native-guard)' % exe)
         return 0
     if t.key == 'win-arm64':
-        probe = subprocess.run([str(exe), '--exit-probe'], cwd=out, env=env,
-                               capture_output=True, text=True, timeout=30)
-        code = probe.returncode & 0xffffffff
-        print('ARM64 clean CRT exit probe: %#x (expected 0x3)' % code)
-        if code != 3:
-            raise RuntimeError('ARM64 CRT-only exit probe failed (%#x):\n%s%s' %
-                               (code, probe.stdout, probe.stderr))
+        for flag in ('--exit-probe', '--trace-exit-probe'):
+            probe = subprocess.run([str(exe), flag], cwd=out, env=env,
+                                   capture_output=True, text=True, timeout=30)
+            code = probe.returncode & 0xffffffff
+            print('ARM64 %s CRT exit probe: %#x (expected 0x3)' % (flag, code))
+            if code != 3:
+                raise RuntimeError('ARM64 %s exit probe failed (%#x):\n%s%s' %
+                                   (flag, code, probe.stdout, probe.stderr))
     r = subprocess.run([str(exe)], cwd=out, env=env, capture_output=True, text=True, timeout=60)
     print(r.stdout + r.stderr, end='')
     main_failed = bool(r.returncode or 'PASS' not in r.stdout)

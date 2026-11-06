@@ -129,6 +129,10 @@ this lane or claim ARM64 portability based only on Python tests.
   fibers. The next hosted run compares that plain Windows ARM64 CRT return to the same result
   after fiber shutdown, to separate a general runner/toolchain exit problem from corrupted
   state remaining after a context-switch sequence.
+- The plain `--exit-probe` returned **3** as expected, ruling out a general CRT return-code
+  failure. The next run adds a root-only backtrace exit probe and checks whether the original
+  thread's TEB pointer, stack bounds, DeallocationStack and FiberData were restored exactly
+  after all switches, before concluding where the normal-process access violation originates.
 
 ## Result
 
