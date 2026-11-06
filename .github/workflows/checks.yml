@@ -122,6 +122,19 @@ jobs:
           path: build/host-rustabi-winarm64/selftest_win_rust_abi.exe
           if-no-files-found: error
           retention-days: 7
+  # Route the one unified game host build to native ARM64 Windows, without a disc.
+  # This CI proves architecture/SDK selections; it does not compile or run the game.
+  win-arm64-host-routing:
+    if: github.event_name == 'pull_request' && github.head_ref == 'azazel/win-arm64-host-routing'
+    runs-on: windows-11-vs2026-arm
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: ARM64 unified host routing and existing Windows OS smoke
+        shell: pwsh
+        env:
+          DHD_CI_ALLOW_C_OUTPUT: '1'
+        run: ./port/tools/ci_win_host_smoke.ps1 -Arch arm64 -HostRouting
   # The draft Windows ARM64 lane uses a free hosted ARM64 runner to test its small native
   # fiber/guard executable. No game disc, licensed assets, SDL3, renderer or secrets required.
   arm64-fiber-smoke:

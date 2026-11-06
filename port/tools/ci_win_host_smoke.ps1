@@ -1,5 +1,5 @@
 # Native GitHub runner only: configure the target VS/SDK compiler and run the host OS smoke.
-param([ValidateSet('arm64', 'x64')][string]$Arch, [switch]$SDL3, [switch]$RustCheck, [switch]$RustBuild, [switch]$RustAbi)
+param([ValidateSet('arm64', 'x64')][string]$Arch, [switch]$SDL3, [switch]$RustCheck, [switch]$RustBuild, [switch]$RustAbi, [switch]$HostRouting)
 $ErrorActionPreference = 'Stop'
 $expected = if ($Arch -eq 'arm64') { 'ARM64' } else { 'AMD64' }
 if ($env:PROCESSOR_ARCHITECTURE -ne $expected) { throw "Expected native $expected runner" }
@@ -53,6 +53,13 @@ python -B -m unittest discover -s port/tools -p test_win_host_os_smoke.py -v
 if ($LASTEXITCODE -ne 0) { throw 'Offline Windows host smoke routing failed' }
 python -B port/tools/build_win_host_smoke.py --arch $Arch --llvm $llvmBin
 if ($LASTEXITCODE -ne 0) { throw 'Native Windows host smoke failed' }
+if ($HostRouting) {
+    if ($Arch -ne 'arm64') { throw 'The native ARM64 host routing lane must use ARM64 Windows' }
+    python -B -m unittest discover -s port/tools -p test_win_arm64_host_routing.py -v
+    if ($LASTEXITCODE -ne 0) { throw 'Full game ARM64 host routing tests failed' }
+    python -B -m unittest discover -s port/tools -p test_win_arm64_fiber_target.py -v
+    if ($LASTEXITCODE -ne 0) { throw 'Native ARM64 fiber routing regression failed' }
+}
 if ($SDL3) {
     if ($Arch -ne 'arm64') { throw 'The SDL3 preflight is for native ARM64 only' }
     $env:DHD_DEVCACHES = Join-Path $env:GITHUB_WORKSPACE 'build/development-cache'
