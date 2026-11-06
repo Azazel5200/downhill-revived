@@ -18,6 +18,9 @@ jobs:
         run: python tools/check_tree.py
       - name: docs linter (findings, citations, paths)
         run: python tools/check_docs.py
+      - name: Synthetic European disc identity tests (no retail game data)
+        if: github.event_name == 'pull_request' && github.head_ref == 'azazel/eu-disc-preflight'
+        run: python -B -m unittest discover -s port/tools -p test_disc_probe.py -v
   # Follow-up to the green ARM64 fiber lane: compile and *run* the Windows host's OS services.
   # No licensed disc, renderer, WABT or local laptop needed; same source gets an x64 regression.
   win-arm64-host-os-smoke:

@@ -133,6 +133,18 @@ the European multilang/Spanish disc has a different code/data image and still
 requires separate release support (finding 100). Never publish a user's ISO,
 extracted game assets or generated licensed core.
 
+To identify a locally owned European/Spanish disc **before** attempting the
+currently USA-only game build, use this metadata-only diagnostic:
+
+    python -B port/tools/disc_probe.py "D:\\My Games\\Downhill.iso"
+
+It reads the ISO in place and prints its `SYSTEM.CNF` boot serial, PAL/NTSC
+setting, disc version, file count, boot ELF size and SHA-256. The optional
+`--hash-iso` also calculates the entire image's SHA-256. No game file is
+extracted, changed or sent anywhere; share only the text report if requesting
+release support (finding 166). `SLES_522.02` confirms the separate European
+game core is required; this diagnostic does not make that disc compatible.
+
 Passing those Python tests alone does **not** demonstrate that ARM64 assembly compiles, links or
 runs. The native `arm64-fiber-smoke` GitHub Actions job separately verifies those properties
 on every update to the experimental draft PR, without requiring the player's laptop. Successful

@@ -40,7 +40,9 @@ readiness must not be inferred from a successful architecture routing check.
 - [x] 2026-11-06: allow the existing Windows-only `--fake` host fixture on ARM64;
   omit retail VU1 compilation only in that independent fixture.
 - [x] 2026-11-06: add no-disc architecture selection tests and CI routing gate.
-- [ ] Hosted Windows ARM64 CI result for the native routing lane.
+- [x] 2026-11-06: hosted Windows ARM64 CI run 42208574537 passed the
+  native routing and existing Windows host OS smoke. The independent tree and
+  docs check passed too; no complete native game was compiled.
 - [ ] Run an actual full host link and boot with a supported retail disc on a
   suitable tester machine, then its graphics, audio, frame and state gates.
 
@@ -66,7 +68,8 @@ readiness must not be inferred from a successful architecture routing check.
 
 ## Result
 
-The shared Windows host's architecture selection is now available for ARM64
-and locally unit tested. **No complete ARM64 game compilation, runtime or
+The shared Windows host's architecture selection is now available for ARM64,
+unit tested and checked on a native hosted Windows ARM64 runner.
+**No complete ARM64 game compilation, runtime or
 performance claim** follows from the routing tests. Retain `in progress`
 until the pending hosted CI and original-disc milestones are verified.
