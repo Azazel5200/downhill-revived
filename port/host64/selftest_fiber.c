@@ -32,6 +32,7 @@ enum { FIBERS=3, ROUNDS=50, NATIVE_STACK=8*1024*1024 };
 static uint32_t stack_pointer=0x100000;
 static HostFiber root, fibers[FIBERS+1];
 static unsigned switches, finished, children;
+static unsigned arm64_backtrace_failures;
 static int mode;  /* 1: --guest-guard, 2: --native-guard */
 
 static uint64_t fp_control(void) {
@@ -92,7 +93,14 @@ static NOINLINE void backtrace_ends(void) {
 #else
     int n=backtrace(frames,64);
 #endif
+#if defined(_WIN32) && (defined(_M_ARM64) || defined(__aarch64__))
+    /* The hosted Windows ARM64 root thread itself currently reports one frame.
+       Record the failure and keep probing the independent fiber invariants;
+       the final result remains FAILED until stack walking is resolved. */
+    if (n<2 || n>=64) ++arm64_backtrace_failures;
+#else
     CHECK(n>=2 && n<64);
+#endif
 }
 static void child(void *arg) { ++children; host_fiber_switch((HostFiber)(uintptr_t)arg); abort(); }
 static void worker(void *arg) {
@@ -171,7 +179,17 @@ int main(int argc,char **argv) {
     host_fiber_delete(slots[5]); CHECK(host_fiber_create(noop,NULL)==slots[5]);
     host64_fiber_shutdown(); CHECK(!host64_fiber_id());
     wasm_rt_free_memory(&memory);
+#if defined(_WIN32) && (defined(_M_ARM64) || defined(__aarch64__))
+    printf("PASS: ARM64 core fibers: %u switches keep registers, FP control, __stack_pointer and "
+           "depth; a fiber from a fiber; a large frame; 64 slots, reuse, ranges "
+           "(backtrace checked separately)\n",switches);
+    if (arm64_backtrace_failures) {
+        fprintf(stderr,"FAIL: ARM64 backtrace below two frames in %u checks\n",arm64_backtrace_failures);
+        return 3;
+    }
+#else
     printf("PASS: fibers: %u switches keep registers, FP control, __stack_pointer and depth; a fiber "
            "from a fiber; a large frame; a backtrace; 64 slots, reuse, ranges\n",switches);
+#endif
     return 0;
 }

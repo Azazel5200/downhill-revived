@@ -108,6 +108,12 @@ this lane or claim ARM64 portability based only on Python tests.
   placed before `/O2`, which can override frame-pointer settings. Move the explicit option
   after `/O2`, assert its order in the test, and print root `x29` and bounds on failure to
   distinguish compiler layout from an incorrect Windows stack-bounds API interpretation.
+- Putting the option after `/O2` did not change the result: ordinary root-thread `x29` was
+  **zero**, and `RtlCaptureStackBackTrace` returned one frame. To expose independent failures,
+  the ARM64 smoke now records short backtraces without aborting immediately, attempts the
+  complete switching/slot test and both deliberate guard-fault children, and **fails the job
+  at the end** if the backtrace requirement is unmet. The original x64 assertions stay strict
+  and unchanged. No partial PASS is a claim of overall ARM64 success.
 
 ## Result
 
