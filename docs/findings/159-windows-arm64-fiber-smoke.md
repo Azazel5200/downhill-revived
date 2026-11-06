@@ -94,6 +94,11 @@ this lane or claim ARM64 portability based only on Python tests.
   in `.seh_*` unwind metadata, omitting the saved nonvolatile registers and LR. The next attempt
   gives each save a corresponding ARM64 unwind directive and logs the actual frame count on
   failure. The native switch, guard faults and full 150 rounds are **not yet validated**.
+- With the additional `.seh_*` saves, the next hosted execution still returned exactly **one**
+  frame from `RtlCaptureStackBackTrace`. Microsoft's ARM64 ABI recommends retaining `x29` frame
+  links for reliable stack walking. The smoke compiler now explicitly uses
+  `-fno-omit-frame-pointer` even under `/O2`; the subsequent native run must establish whether
+  that resolves the trace or whether the synthetic fiber needs a stronger unwind boundary.
 
 ## Result
 

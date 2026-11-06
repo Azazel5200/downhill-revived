@@ -157,7 +157,10 @@ def windows_fiber_command(t, a, wabt, out, exe, sources, flags, env):
         libs = ['/libpath:'+str(msvc/'lib/arm64'),
                 '/libpath:'+str(sdk/'Lib'/version/'ucrt/arm64'),
                 '/libpath:'+str(sdk/'Lib'/version/'um/arm64')]
-        return [clang, '--target='+t.rust, '-fuse-ld=lld', '/nologo', '/O2', '/MT', *flags,
+        # RtlCaptureStackBackTrace on Windows ARM64 uses the x29 frame chain.
+        # Keep it even under /O2; otherwise a switched fiber yields one frame.
+        return [clang, '--target='+t.rust, '-fuse-ld=lld', '-fno-omit-frame-pointer',
+                '/nologo', '/O2', '/MT', *flags,
                 *headers, *sources, '/Fe'+str(exe), '/Fo'+str(out)+os.sep, '/link',
                 *libs, 'onecore.lib', '/subsystem:console']
     return [a.llvm/'clang-cl.exe', '--target=x86_64-pc-windows-msvc', '/nologo', '/O2', '/MT', *flags,
