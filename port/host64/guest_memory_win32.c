@@ -7,6 +7,16 @@
 #include <stdlib.h>
 #include "guest_memory_os.h"
 
+/* CONTEXT is CPU-specific: the Windows ARM64 SDK exposes Pc, not x64's Rip.
+   Keep the same fault report and unwinder on both Windows 64-bit architectures. */
+#if defined(_M_ARM64)
+#define HOST_CONTEXT_PC(ctx) ((ctx).Pc)
+#define HOST_CONTEXT_PC_NAME "pc"
+#else
+#define HOST_CONTEXT_PC(ctx) ((ctx).Rip)
+#define HOST_CONTEXT_PC_NAME "rip"
+#endif
+
 static HANDLE ram;
 static PVOID reporter;
 void os_fail(const char *what) {
@@ -55,18 +65,19 @@ static LONG CALLBACK report_fault(EXCEPTION_POINTERS *e) {
         host-guest_base>=0x200000000ull) return EXCEPTION_CONTINUE_SEARCH;
     char text[256]; DWORD written;
     int n=snprintf(text,sizeof text,"host64 memory: %s of uncommitted guest address 0x%09llx "
-        "at rip %p (image base %p)\n",r->ExceptionInformation[0]==1?"write":"read",
-        (unsigned long long)(host-guest_base),r->ExceptionAddress,(void *)GetModuleHandleW(NULL));
+        "at %s %p (image base %p)\n",r->ExceptionInformation[0]==1?"write":"read",
+        (unsigned long long)(host-guest_base),HOST_CONTEXT_PC_NAME,r->ExceptionAddress,
+        (void *)GetModuleHandleW(NULL));
     WriteFile(GetStdHandle(STD_ERROR_HANDLE),text,(DWORD)n,&written,NULL);
     /* The callers, as RVAs (host64_rva.py): walk from the faulting context. */
     CONTEXT c=*e->ContextRecord; uintptr_t base=(uintptr_t)GetModuleHandleW(NULL);
-    for (int i=0;i<24 && c.Rip;i++) {
-        DWORD64 image; PRUNTIME_FUNCTION f=RtlLookupFunctionEntry(c.Rip,&image,NULL);
-        n=snprintf(text,sizeof text,"  at rva 0x%llx\n",(unsigned long long)(c.Rip-base));
+    for (int i=0;i<24 && HOST_CONTEXT_PC(c);i++) {
+        DWORD64 image; PRUNTIME_FUNCTION f=RtlLookupFunctionEntry(HOST_CONTEXT_PC(c),&image,NULL);
+        n=snprintf(text,sizeof text,"  at rva 0x%llx\n",(unsigned long long)(HOST_CONTEXT_PC(c)-base));
         WriteFile(GetStdHandle(STD_ERROR_HANDLE),text,(DWORD)n,&written,NULL);
         if (!f) break;
         void *data; DWORD64 frame;
-        RtlVirtualUnwind(UNW_FLAG_NHANDLER,image,c.Rip,f,&c,&data,&frame,NULL);
+        RtlVirtualUnwind(UNW_FLAG_NHANDLER,image,HOST_CONTEXT_PC(c),f,&c,&data,&frame,NULL);
     }
     TerminateProcess(GetCurrentProcess(),(UINT)EXCEPTION_ACCESS_VIOLATION);
     return EXCEPTION_CONTINUE_SEARCH;
