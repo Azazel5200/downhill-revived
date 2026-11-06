@@ -39,7 +39,7 @@ Windows ARM64 fiber adapter exists yet; do not claim those tests passed.
   even though the POSIX and Android ARM64 host adapters already exist. Source: Microsoft Learn,
   https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-arm64_nt_context.
 - `port/tools/build_host64.py` currently supports only Windows x64; its MSVC library paths,
-  clang target and fiber adapter are hard-coded for x64 (finding 156). Fixing this reporter is
+  clang target and fiber adapter are hard-coded for x64 (preflight draft PR #2). Fixing this reporter is
   one prerequisite, not a working build target.
 
 ## Result
