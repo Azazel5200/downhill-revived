@@ -24,9 +24,10 @@ Acceptance before marking this finding current:
    `--guest-guard` and `--native-guard` child runs.
 4. The existing Windows x64 fiber test must continue to pass unchanged.
 
-Items 2–3 now pass on a native GitHub-hosted Windows 11 ARM64 runner. Item 4 and a repeat of
-items 2–3 on the user's own Windows 11 ARM64 laptop are still pending. Do not merge this lane
-or claim full ARM64 game portability based on this isolated selftest.
+Items 2–3 now pass on a native GitHub-hosted Windows 11 ARM64 runner. The standalone executable's
+normal run also passes on the user's own Windows 11 ARM64 laptop; the user's compiler setup and
+local guard-fault child runs are not tested yet. Item 4 (unchanged Windows x64 regression)
+remains pending. Do not merge this lane or claim full ARM64 game portability from this selftest.
 
 ## Progress
 
@@ -48,8 +49,12 @@ or claim full ARM64 game portability based on this isolated selftest.
   unexpected access violation after returning from the fiber stack.
 - [ ] Resolve Windows ARM64 stack-walk depth, or independently establish an appropriate
   diagnostic alternative with equivalent stack-boundary safety.
-- [ ] Repeat final verification on the user's own Windows 11 ARM64 hardware.
-- [ ] Rerun the unchanged win-x64 fiber selftest and the full port tier in the correct environment.
+- [x] Run the hosted ARM64 standalone executable on the user's own Windows 11 ARM64 hardware:
+  150 switches and all three five-frame stack walks, normal exit status 0.
+- [ ] Repeat both deliberate guard-fault child runs locally and, if needed, compile the
+  selftest locally once the ARM64 VS/LLVM toolchain is installed.
+- [ ] Rerun the unchanged win-x64 fiber selftest on native Windows x64 (a hosted x64 CI job is
+  added, with results pending); rerun the full port tier in its correct game-capable environment.
 
 ## Decisions
 
@@ -172,10 +177,24 @@ or claim full ARM64 game portability based on this isolated selftest.
   after successful native CI, so the same executable can later be run from a non-system drive
   on the user's laptop without first installing LLVM/MSVC. It contains no game binary, disc
   data or game assets, and is **not** a playable release.
+- The user downloaded this artifact to their own Windows 11 ARM64 machine, extracted it under
+  the project on the non-system drive, and ran `selftest_fiber.exe` from PowerShell. They
+  supplied the complete output: the root thread and both fibers each showed fast-path depth
+  **1** and bounded virtual-unwind depth **5**, the 150-switch core and all 3 fallback checks
+  printed **PASS**, and `$LASTEXITCODE` was **0**. This independently confirms the core smoke
+  outside GitHub's hosted runner. No local guard-fault child runs or local compilation were
+  reported, so these remain explicitly unverified on the user's machine.
+- A separate `windows-2022` GitHub job now attempts the **existing x64 fiber selftest** on a
+  native x64 host, to check that adding the ARM64 adapter did not regress the established
+  Windows switch. The x64 fiber-test command now honors real MSVC/SDK paths exported by a VS
+  developer shell, while retaining the original fixed x64 paths when no shell metadata exists.
+  Like the ARM64 job, only the hosted disposable **fiber test** may use the CI-only C: exception;
+  user-local output remains restricted to a non-system drive. The x64 CI result is pending.
 
 ## Result
 
 ARM64 compiler/linker, the core 150-switch/guard behavior, clean shutdown and an alternative
-bounded native stack walk are now validated on GitHub's native hosted hardware. The user's
-on-device test and unchanged Windows x64 regression test remain pending. This draft is not a
-player-ready ARM64 game executable; do not merge it yet.
+bounded native stack walk are now validated on GitHub's hosted ARM64 hardware. The standalone
+150-switch and stack-walk test is also validated on the user's Windows 11 ARM64 laptop. Local
+guard-fault child runs and the unchanged Windows x64 regression remain pending. This draft is
+not a player-ready ARM64 game executable; do not merge it yet.

@@ -101,8 +101,9 @@ game has no disc dialog of its own; for players the launcher picks the disc (fin
 It compiles the small Windows ARM64 guest-memory and EE-fiber selftest with the native Windows
 ARM64 switch adapter. It does **not** compile the game, SDL3 or the Rust renderer; do not pass a
 disc or wasm module to this command. The isolated test now passes on GitHub's native Windows
-ARM64 hosted runner, but testing on the user's own device remains pending (finding 159);
-this is not a supported release target.
+ARM64 hosted runner. The hosted executable's normal 150-switch and stack-walk run also passes
+on the user's own ARM64 laptop; local guard-fault runs and local compilation are still pending
+(finding 159). This is not a supported release target.
 
 From a Windows 11 ARM64 developer PowerShell with `VCToolsInstallDir`, `WindowsSdkDir` and
 `WindowsSDKVersion` set for an **ARM64** MSVC/Windows SDK installation (and those directories

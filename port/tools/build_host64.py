@@ -121,26 +121,33 @@ def glue(t):
                                  'launcher.c')]
 
 
-def windows_arm64_paths(env):
-    """Select an actual ARM64 MSVC/SDK environment, never silently substitute x64 libraries."""
+def windows_developer_paths(env, arch):
+    """Select actual MSVC/SDK libraries for the requested Windows architecture."""
     # os.environ is case-insensitive on Windows, but dict(os.environ, ...) is
     # case-sensitive and its environment keys may already be uppercased.
     env_ci = {key.casefold(): value for key, value in env.items()}
     needed = ('VCToolsInstallDir', 'WindowsSdkDir', 'WindowsSDKVersion')
     missing = [name for name in needed if not env_ci.get(name.casefold())]
     if missing:
-        raise RuntimeError('Windows ARM64 fiber smoke requires an ARM64 VS developer shell: '
+        raise RuntimeError('Windows %s fiber smoke requires a %s VS developer shell: ' %
+                           (arch, arch) +
                            'missing ' + ', '.join(missing))
     msvc, sdk = Path(env_ci['vctoolsinstalldir']), Path(env_ci['windowssdkdir'])
     version = env_ci['windowssdkversion'].strip('\\/')
-    paths = [msvc/'include', msvc/'lib/arm64',
+    paths = [msvc/'include', msvc/'lib'/arch,
              *[sdk/'Include'/version/x for x in ('ucrt', 'um', 'shared')],
-             sdk/'Lib'/version/'ucrt/arm64', sdk/'Lib'/version/'um/arm64']
+             sdk/'Lib'/version/'ucrt'/arch, sdk/'Lib'/version/'um'/arch]
     missing = [str(path) for path in paths if not path.is_dir()]
     if missing:
-        raise RuntimeError('Windows ARM64 fiber smoke: missing ARM64 compiler/SDK paths:\n' +
+        raise RuntimeError('Windows %s fiber smoke: missing %s compiler/SDK paths:\n' %
+                           (arch, arch) +
                            '\n'.join(missing))
     return msvc, sdk, version
+
+
+def windows_arm64_paths(env):
+    """Keep the native ARM64 preflight contract explicit: x64 libraries never qualify."""
+    return windows_developer_paths(env, 'arm64')
 
 
 def windows_fiber_command(t, a, wabt, out, exe, sources, flags, env):
@@ -163,10 +170,17 @@ def windows_fiber_command(t, a, wabt, out, exe, sources, flags, env):
                 '/nologo', '/O2', '-fno-omit-frame-pointer', '/MT', *flags,
                 *headers, *sources, '/Fe'+str(exe), '/Fo'+str(out)+os.sep, '/link',
                 *libs, 'onecore.lib', '/subsystem:console']
+    # Existing win-x64 local command stays as-is unless a developer shell explicitly
+    # identifies a different VS/SDK version (e.g. a disposable GitHub x64 runner).
+    env_ci = {key.casefold(): value for key, value in env.items()}
+    if any(env_ci.get(k.casefold()) for k in ('VCToolsInstallDir','WindowsSdkDir','WindowsSDKVersion')):
+        msvc, sdk, version = windows_developer_paths(env, 'x64')
+    else:
+        msvc, sdk, version = MSVC, SDK, VERSION
     return [a.llvm/'clang-cl.exe', '--target=x86_64-pc-windows-msvc', '/nologo', '/O2', '/MT', *flags,
-            '/imsvc'+str(MSVC/'include'), *['/imsvc'+str(SDK/'Include'/VERSION/x) for x in ('ucrt','um','shared')],
-            *sources, '/Fe'+str(exe), '/Fo'+str(out)+os.sep, '/link', '/libpath:'+str(MSVC/'lib/x64'),
-            '/libpath:'+str(SDK/'Lib'/VERSION/'ucrt/x64'), '/libpath:'+str(SDK/'Lib'/VERSION/'um/x64'),
+            '/imsvc'+str(msvc/'include'), *['/imsvc'+str(sdk/'Include'/version/x) for x in ('ucrt','um','shared')],
+            *sources, '/Fe'+str(exe), '/Fo'+str(out)+os.sep, '/link', '/libpath:'+str(msvc/'lib/x64'),
+            '/libpath:'+str(sdk/'Lib'/version/'ucrt/x64'), '/libpath:'+str(sdk/'Lib'/version/'um/x64'),
             'onecore.lib', '/subsystem:console']
 
 
@@ -340,7 +354,7 @@ def main():
     # GitHub-hosted Windows runners have an ephemeral C: workspace. Only the
     # ARM64 fiber CI smoke test may opt into that runner-local exception;
     # ordinary builds (including the user's laptop) still reject C:.
-    hosted_ci_fiber = (a.fiber_test and t.key == 'win-arm64'
+    hosted_ci_fiber = (a.fiber_test and t.windows
                        and os.environ.get('GITHUB_ACTIONS') == 'true'
                        and os.environ.get('RUNNER_ENVIRONMENT') == 'github-hosted'
                        and os.environ.get('DHD_CI_ALLOW_C_OUTPUT') == '1')

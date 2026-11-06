@@ -1,4 +1,4 @@
-"""Offline routing checks for the experimental Windows ARM64 fiber smoke target.
+"""Offline routing checks for the experimental Windows fiber smoke targets.
 
 These do not compile ARM64 code or substitute for a run on Windows ARM64 hardware.
 """
@@ -82,6 +82,29 @@ class WindowsArm64FiberTargetTests(unittest.TestCase):
                                 env={**os.environ, 'DHD_BUILD_SLOTS': '0'}, timeout=20)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('experimental --fiber-test only', result.stderr)
+
+    def test_x64_regression_uses_its_own_developer_libraries(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            msvc, sdk, llvm, version = root/'msvc', root/'sdk', root/'llvm', '10.0.99999.0'
+            for path in (msvc/'include', msvc/'lib/x64',
+                         *[sdk/'Include'/version/name for name in ('ucrt', 'um', 'shared')],
+                         sdk/'Lib'/version/'ucrt/x64', sdk/'Lib'/version/'um/x64'):
+                path.mkdir(parents=True)
+            env = dict(VCToolsInstallDir=str(msvc), WindowsSdkDir=str(sdk),
+                       WindowsSDKVersion=version+'\\')
+            args = SimpleNamespace(llvm=llvm)
+            cmd = builder.windows_fiber_command(builder.TARGETS['win-x64'], args, root,
+                                                root, root/'test.exe', [Path('selftest.c')], [],
+                                                {name.upper(): value for name, value in env.items()})
+            text = ' '.join(map(str, cmd)).replace('\\', '/').lower()
+            self.assertIn('--target=x86_64-pc-windows-msvc', text)
+            self.assertIn('/lib/x64', text)
+            self.assertIn('ucrt/x64', text)
+            self.assertIn('um/x64', text)
+            self.assertNotIn('/lib/arm64', text)
+            with self.assertRaisesRegex(RuntimeError, 'x64'):
+                builder.windows_developer_paths(dict(env, VCToolsInstallDir=''), 'x64')
 
 
 if __name__ == '__main__':
