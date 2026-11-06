@@ -46,12 +46,22 @@ play. No original disc or user's laptop is needed.
 - Use the MSVC/SDK ARM64 environment established by the same Windows host
   smoke used in findings 160–163. Never treat an x64 import library as proof
   of an ARM64 link.
+- The Windows `windows.0.52.0.lib` from Rust's locked `windows_aarch64_msvc
+  0.52.6` package resides under Cargo's registry, not the Visual Studio SDK.
+  Only that exact ARM64 import archive's verified directory can be added to
+  the independent C link command.
 - Check a pure API before creating a GPU device, since GitHub's headless runner
   cannot establish the user's Adreno performance or rendering behaviour.
 
 ## Surprises
 
-Pending native CI evidence.
+- First native [CI run 42173632092](https://github.com/Azazel5200/downhill-revived/actions/runs/42173632092):
+  the real Rust ARM64 library built and passed all gates again (2,427 COFF ARM64
+  members); `clang-cl` compiled the C fixture to ARM64, but `lld-link` stopped
+  at `could not open 'windows.0.52.0.lib'`. This is a missing linker search
+  directory, **not** a Rust compilation failure. Resolve the exact Cargo
+  `windows_aarch64_msvc-0.52.6/lib` directory; do not copy or substitute an
+  import archive from an x64 package.
 
 ## References
 

@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import struct
 import subprocess
 import sys
@@ -12,6 +13,7 @@ import check_arm64_coff
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / 'port' / 'tools' / 'selftest_win_rust_abi.c'
 HEADER = ROOT / 'port' / 'render' / 'include'
+WINDOWS_052_IMPORT = 'windows.0.52.0.lib'
 
 
 def windows_arm64_executable(path):
@@ -24,6 +26,26 @@ def windows_arm64_executable(path):
     machine = struct.unpack_from('<H', data, offset + 4)[0]
     if machine != check_arm64_coff.MACHINE_ARM64:
         raise ValueError('executable machine is 0x%04x, not native ARM64' % machine)
+
+
+def cargo_windows_import_paths(cargo_home, native_static_libs):
+    """Find *only* the target-locked Windows ARM64 import lib in Cargo's registry.
+
+    Rust's linker gets this -L automatically from the windows-targets crate; the
+    independent C host linker needs the same directory explicitly. No x64 fallback.
+    """
+    windows_libs = [lib for lib in native_static_libs if re.fullmatch(r'windows\.\d+\.\d+\.\d+\.lib', lib)]
+    if not windows_libs:
+        return []
+    if windows_libs != [WINDOWS_052_IMPORT]:
+        raise ValueError('unexpected Windows import library list: %r' % windows_libs)
+    root = Path(cargo_home) / 'registry' / 'src'
+    found = sorted(root.glob('*/windows_aarch64_msvc-0.52.6/lib/' + WINDOWS_052_IMPORT))
+    if len(found) != 1:
+        raise ValueError('expected exactly one locked Windows ARM64 import library under Cargo registry, found %d' % len(found))
+    # An ARM64 import archive is COFF too; do not accidentally link the x64 package.
+    check_arm64_coff.archive_machine_summary(found[0])
+    return ['/libpath:' + str(found[0].parent)]
 
 
 def main(argv=None):
@@ -54,6 +76,10 @@ def main(argv=None):
     # Respect the real VS ARM64 developer environment's LIB paths; do not read an x64 SDK.
     if not os.environ.get('LIB'):
         p.error('the native VS developer environment must supply ARM64 LIB paths')
+    try:
+        link += cargo_windows_import_paths(os.environ['CARGO_HOME'], report['native_static_libs'])
+    except (OSError, ValueError, KeyError) as exc:
+        p.error('locked ARM64 Rust import library unavailable: %s' % exc)
     for cmd in (cc, link):
         print('  + ' + ' '.join(cmd), flush=True)
         proc = subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True, errors='replace')
