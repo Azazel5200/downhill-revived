@@ -49,6 +49,17 @@ the actual game compiles, boots, runs at 60 fps or supports Spanish.
 ## Progress
 
 - [x] Add branch-scoped CI orchestration, with checked upstream tool archives.
+- [x] First integrated attempt, run 42210359542: WABT 1.0.42 and native wasi-sdk
+  34.0 were fetched and SHA-256 verified; SDL3 compiled in 112.9 s and the
+  actual native ARM64 Rust renderer staticlib compiled in 181.8 s; synthetic
+  wasm2c preparation also succeeded. Compilation then exposed 20 x64-only
+  Windows CONTEXT register references in port/hle/host.c, starting with
+  Rsp and Rip, plus x64 hardware debug-register assumptions.
+- [x] Select Pc/Sp and X[0..30] on Windows ARM64 for diagnostics, capture
+  ARM64 backtraces with RtlCaptureContext, retain x64's existing fields and
+  debug-watchpoint path unchanged. On Windows ARM64, report unsupported
+  hardware watchpoints and direct the user to portable DHD_STATE_WATCH.
+  The next hosted compilation must verify these changes.
 - [ ] Hosted full synthetic ARM64 build succeeds.
 - [ ] Hosted headless synthetic/negative tests pass.
 - [ ] Real, unmodified European game core compiled and played on hardware

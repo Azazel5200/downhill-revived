@@ -57,7 +57,10 @@
 #include <SDL3/SDL.h>
 
 /* The instruction pointer and stack pointer of a CONTEXT. */
-#ifdef _WIN32
+#if defined(_WIN32) && defined(_M_ARM64)
+#define CTX_IP(c) ((uintptr_t)(c)->Pc)
+#define CTX_SP(c) ((uintptr_t)(c)->Sp)
+#elif defined(_WIN32)
 #define CTX_IP(c) ((uintptr_t)(c)->Rip)
 #define CTX_SP(c) ((uintptr_t)(c)->Rsp)
 #else
@@ -176,7 +179,13 @@ static void snapshot(Snapshot *out, const CONTEXT *c)
 static void print_snapshot(const Snapshot *s)
 {
     const CONTEXT *c = &s->context;
-#ifdef _WIN32
+#if defined(_WIN32) && defined(_M_ARM64)
+    /* Windows ARM64's CONTEXT has X[0..30], Sp and Pc, not x64's R* registers. */
+    fprintf(stderr, "  pc %016llX sp %016llX lr %016llX x0 %016llX x1 %016llX x2 %016llX x19 %016llX x29 %016llX\n",
+            (unsigned long long)c->Pc, (unsigned long long)c->Sp, (unsigned long long)c->X[30],
+            (unsigned long long)c->X[0], (unsigned long long)c->X[1], (unsigned long long)c->X[2],
+            (unsigned long long)c->X[19], (unsigned long long)c->X[29]);
+#elif defined(_WIN32)
     fprintf(stderr, "  rip %016llX rax %016llX rbx %016llX rcx %016llX rdx %016llX rsi %016llX rdi %016llX rsp %016llX\n",
             (unsigned long long)c->Rip, (unsigned long long)c->Rax, (unsigned long long)c->Rbx,
             (unsigned long long)c->Rcx, (unsigned long long)c->Rdx, (unsigned long long)c->Rsi,
@@ -433,8 +442,13 @@ void host_backtrace(void)
 {
 #ifdef _WIN32
     CONTEXT c = {0};
+#if defined(_M_ARM64)
+    /* Get the real SP and LR. __builtin_frame_address(0) is x29, not SP. */
+    RtlCaptureContext(&c);
+#else
     c.Rip = (DWORD64)(uintptr_t)__builtin_return_address(0);
     c.Rsp = (DWORD64)(uintptr_t)__builtin_frame_address(0);
+#endif
     report(&c);
 #else
     void *frames[32];
@@ -458,7 +472,7 @@ static int game_thread_set;
 static uint32_t watch_address[4];
 static atomic_int watch_hits[4];
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(_M_ARM64)
 static LONG WINAPI watch_hit(EXCEPTION_POINTERS *e)
 {
     CONTEXT *c = e->ContextRecord;
@@ -511,7 +525,11 @@ static int SDLCALL watch_arm(void *unused)
     if (!spec) spec = state_trace_watch_spec();
     (void)unused;
     (void)spec;
+#if defined(_WIN32) && defined(_M_ARM64)
+    fprintf(stderr, "watch: ARM64 hardware watchpoints are not implemented; use DHD_STATE_WATCH\n");
+#else
     fprintf(stderr, "watch: hardware watchpoints need Windows; use DHD_STATE_WATCH\n");
+#endif
     return 0;
 }
 #endif
@@ -608,8 +626,14 @@ static int SDLCALL freeze_watch(void *unused)
             uintptr_t lo = 0, hi = 0;
             host_code_range(&lo, &hi);
             fprintf(stderr, "  image base %016llX: ", (unsigned long long)base);
-            if (c.Rip >= lo && c.Rip < hi) fprintf(stderr, "rip rva 0x%llx, ", (unsigned long long)(c.Rip - base));
-            else fprintf(stderr, "rip outside the exe, ");
+            uintptr_t ip = CTX_IP(&c);
+#if defined(_M_ARM64)
+            const char *ip_name = "pc";
+#else
+            const char *ip_name = "rip";
+#endif
+            if (ip >= lo && ip < hi) fprintf(stderr, "%s rva 0x%llx, ", ip_name, (unsigned long long)(ip - base));
+            else fprintf(stderr, "%s outside the exe, ", ip_name);
             fprintf(stderr, "on the stack");
             for (unsigned i = 0; i < s.count; i++)
                 fprintf(stderr, " rva 0x%llx", (unsigned long long)(s.returns[i] - base));
