@@ -201,9 +201,10 @@ def fiber_test(t, a, cc, wabt, out, env):
                                    (flag, code, probe.stdout, probe.stderr))
     r = subprocess.run([str(exe)], cwd=out, env=env, capture_output=True, text=True, timeout=60)
     print(r.stdout + r.stderr, end='')
-    main_failed = bool(r.returncode or 'PASS' not in r.stdout)
+    main_code = r.returncode  # guard-child runs below reuse `r`
+    main_failed = bool(main_code or 'PASS' not in r.stdout)
     if main_failed and t.key != 'win-arm64':
-        raise RuntimeError('selftest_fiber failed (%d)' % r.returncode)
+        raise RuntimeError('selftest_fiber failed (%d)' % main_code)
     for flag, report in (('--guest-guard', 'uncommitted guest address 0x006000000'),
                          ('--native-guard', 'native stack: 8 MiB less 64 KiB written')):
         r = subprocess.run([str(exe), flag], cwd=out, env=env, capture_output=True, text=True, timeout=60)
@@ -215,7 +216,7 @@ def fiber_test(t, a, cc, wabt, out, env):
     if main_failed:
         # Preserve the failing result, but still report the independent guard
         # checks on ARM64 so hosted diagnostics need fewer full VM launches.
-        raise RuntimeError('selftest_fiber failed (%d); guard checks completed' % r.returncode)
+        raise RuntimeError('selftest_fiber failed (%d); guard checks completed' % main_code)
     return 0
 
 
