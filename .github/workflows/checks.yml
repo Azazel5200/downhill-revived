@@ -56,7 +56,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'ARM64 VS developer environment failed' }
           foreach ($row in $rows) {
             if ($row -match '^([^=]+)=(.*)$') {
-              [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2], 'Process')
+              # Export through PowerShell's Env: provider so native child processes
+              # such as Python inherit these values, too.
+              Set-Item -Path ('Env:' + $Matches[1]) -Value $Matches[2]
             }
           }
           # Some hosted images launch VsDevCmd without exporting the expected
@@ -85,6 +87,8 @@ jobs:
             if (!$sdkVersion) { throw 'Windows SDK ARM64 libraries are unavailable' }
             $env:WindowsSDKVersion = $sdkVersion.Name + '\'
           }
+          python -B -c "import os; keys=('VCToolsInstallDir','WindowsSdkDir','WindowsSDKVersion'); print('Python developer variables:', {k:bool(os.getenv(k)) for k in keys})"
+          if ($LASTEXITCODE -ne 0) { throw 'Python could not inspect the ARM64 developer environment' }
           $clang = Get-Command clang-cl.exe -ErrorAction SilentlyContinue
           if ($clang) { $llvmBin = Split-Path $clang.Source }
           else {
