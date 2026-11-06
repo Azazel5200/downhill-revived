@@ -17,11 +17,12 @@ Acceptance:
 1. `python -B -m unittest discover -s port/tools -p test_win_arm64_sdl3_target.py -v`
    passes locally, with ARM64 target and library paths separated from the x64 SDK.
 2. Native hosted Windows ARM64 CI builds the static SDL3 library with CMake and Ninja,
-   specifically `aarch64-pc-windows-msvc`, using the same upstream source and feature options.
+   specifically `aarch64-pc-windows-msvc`, using the same upstream source and feature options:
+   **passed**.
 3. The linker verifies ARM64 compatibility by producing `selftest_win_sdl3.exe`; a native
-   Windows ARM64 process then initializes and shuts down SDL3 successfully.
-4. The preceding Windows ARM64 host OS smoke still passes on the same runner.
-5. Docs and repository never-commit checks pass.
+   Windows ARM64 process then initializes and shuts down SDL3 successfully: **passed**.
+4. The preceding Windows ARM64 host OS smoke still passes on the same runner: **passed**.
+5. Docs and repository never-commit checks pass: **passed**.
 
 The full game's SDL window and GPU surface, audio device, controller mapping, Rust graphics,
 game data and frame-time are out of scope. These require separate actual-machine checks.
@@ -31,7 +32,11 @@ game data and frame-time are out of scope. These require separate actual-machine
 - [x] 2026-11-06: add an asset-free SDL3 ARM64 link/startup test and a hosted Windows ARM64
   build job, reusing the proven native Visual Studio compiler/SDK setup and pinned SDL3 recipe.
 - [x] 2026-11-06: add offline target and dependency-command checks.
-- [ ] Run the native hosted SDL3 CMake build, linker and startup test.
+- [x] 2026-11-06: native Windows ARM64 hosted
+  [CI run 42168576509](https://github.com/Azazel5200/downhill-revived/actions/runs/42168576509)
+  built `build/port/sdl3/3.4.18-aarch64/build/SDL3-static.lib`, linked the PE executable and
+  printed `PASS: native Windows ARM64 SDL3 3.4.18 initialized (without opening devices)`.
+  The same native runner (Windows 11 25H2, Cobalt 100) also passed the host OS smoke and docs.
 - [ ] Inspect any Windows ARM64-specific SDL backend errors before broader integration.
 
 ## Decisions
@@ -49,6 +54,8 @@ game data and frame-time are out of scope. These require separate actual-machine
 - `sdl3.build(target)` already accepts an explicit target triple and separates the output by
   architecture. The full host builder does not pass the Windows ARM64 target yet, and remains
   intentionally blocked. First validate the library independently.
+- Native SDL3 3.4.18 static build and `SDL_Init(0)` succeeded without changing the pinned
+  source or feature flags; the full game cannot be inferred from this isolated result.
 
 ## References
 
@@ -57,4 +64,7 @@ game data and frame-time are out of scope. These require separate actual-machine
 
 ## Result
 
-Pending native ARM64 build and runtime verification; keep this finding `in progress`.
+The native Windows ARM64 build, link and startup smoke passed. The asset-free standalone
+diagnostic binary is available from the hosted CI artifact for seven days. Leave this finding
+`in progress` until its stacked dependencies are integrated; it is not a playable game or a
+window/audio/controller runtime validation.
