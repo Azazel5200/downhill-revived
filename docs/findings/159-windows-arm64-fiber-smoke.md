@@ -26,8 +26,8 @@ Acceptance before marking this finding current:
 
 Items 2–3 now pass on a native GitHub-hosted Windows 11 ARM64 runner. The standalone executable's
 normal run also passes on the user's own Windows 11 ARM64 laptop; the user's compiler setup and
-local guard-fault child runs are not tested yet. Item 4 (unchanged Windows x64 regression)
-remains pending. Do not merge this lane or claim full ARM64 game portability from this selftest.
+local guard-fault child runs are not tested yet. Item 4 also passes on a native hosted Windows
+x64 runner. Do not claim full ARM64 game portability from this isolated selftest.
 
 ## Progress
 
@@ -47,14 +47,16 @@ remains pending. Do not merge this lane or claim full ARM64 game portability fro
   switched fiber contexts on the hosted runner.
 - [x] Confirm the normal selftest exits with its intended diagnostic code (`3`) and not an
   unexpected access violation after returning from the fiber stack.
-- [ ] Resolve Windows ARM64 stack-walk depth, or independently establish an appropriate
+- [x] Resolve Windows ARM64 stack-walk depth, or independently establish an appropriate
   diagnostic alternative with equivalent stack-boundary safety.
 - [x] Run the hosted ARM64 standalone executable on the user's own Windows 11 ARM64 hardware:
   150 switches and all three five-frame stack walks, normal exit status 0.
 - [ ] Repeat both deliberate guard-fault child runs locally and, if needed, compile the
   selftest locally once the ARM64 VS/LLVM toolchain is installed.
-- [ ] Rerun the unchanged win-x64 fiber selftest on native Windows x64 (a hosted x64 CI job is
-  added, with results pending); rerun the full port tier in its correct game-capable environment.
+- [x] Rerun the unchanged win-x64 fiber selftest on a native hosted Windows x64 runner:
+  150 switches, stack trace, 64 slots and both expected guard faults all pass.
+- [ ] Rerun the full port tier in its correct game-capable environment; the ARM64 game target
+  itself has not been implemented.
 
 ## Decisions
 
@@ -62,7 +64,8 @@ remains pending. Do not merge this lane or claim full ARM64 game portability fro
   parallel game implementation. The existing POSIX AArch64 assembly is not Windows COFF/SEH.
 - Frame saves callee-saved x19–x30, d8–d15 and FPCR; Windows ARM64's `x18` is the TEB pointer.
   Save/restore StackBase, StackLimit and DeallocationStack together with SP, like the existing
-  x64 Windows adapter. Exact TEB offsets and unwind behavior remain a hardware-test risk.
+  x64 Windows adapter. Tested with TEB restoration checks on hosted ARM64 and the complete
+  normal selftest on the user's ARM64 laptop; other versions still need validation.
 - LLVM, MSVC headers, SDK ARM64 libs and WABT are the only compiler inputs for this selftest.
   Cargo/Rust, SDL3, CMake and the game disc are not needed here.
 - Do not silently select the hardcoded Windows x64 MSVC/SDK locations from the existing game
@@ -189,12 +192,16 @@ remains pending. Do not merge this lane or claim full ARM64 game portability fro
   Windows switch. The x64 fiber-test command now honors real MSVC/SDK paths exported by a VS
   developer shell, while retaining the original fixed x64 paths when no shell metadata exists.
   Like the ARM64 job, only the hosted disposable **fiber test** may use the CI-only C: exception;
-  user-local output remains restricted to a non-system drive. The x64 CI result is pending.
+  user-local output remains restricted to a non-system drive. The first native hosted x64 run
+  **passed** all 150 switches, backtrace/slot checks and both deliberate guard faults
+  (`0xc0000005`). The ARM64 and docs jobs passed in the same run:
+  https://github.com/Azazel5200/downhill-revived/actions/runs/42163592795.
 
 ## Result
 
 ARM64 compiler/linker, the core 150-switch/guard behavior, clean shutdown and an alternative
 bounded native stack walk are now validated on GitHub's hosted ARM64 hardware. The standalone
 150-switch and stack-walk test is also validated on the user's Windows 11 ARM64 laptop. Local
-guard-fault child runs and the unchanged Windows x64 regression remain pending. This draft is
-not a player-ready ARM64 game executable; do not merge it yet.
+guard-fault child runs remain untested, but the unchanged Windows x64 fiber regression passes
+on native hosted Windows x64. The full game build is not supported for Windows ARM64 yet.
+Keep this draft separate from a player-ready release.

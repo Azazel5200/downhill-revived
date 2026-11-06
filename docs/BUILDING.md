@@ -128,6 +128,8 @@ runs. The native `arm64-fiber-smoke` GitHub Actions job separately verifies thos
 on every update to the experimental draft PR, without requiring the player's laptop. Successful
 jobs retain `win-arm64-fiber-selftest-not-game` for seven days as a downloadable, standalone
 test executable; it is **not** Downhill Revived and must not be offered as a game release.
+The same draft PR also runs the unchanged fiber selftest on a native Windows x64 runner as a
+regression check; both architectures' 150-switch and guard-fault tests pass in CI (finding 159).
 
 ### Tools outside the checkout
 
