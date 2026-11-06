@@ -8,6 +8,7 @@
    generated imports_gen.c, host.c). The module sees only host_api.h. */
 #include "host_api.h"
 #include "host_os.h"
+#include "fp_arm64_csr.h"
 #include "../include/guest.h"
 
 #include <fcntl.h>
@@ -17,7 +18,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <windows.h>
+#if defined(_M_X64) || defined(__x86_64__)
 #include <xmmintrin.h>
+#endif
 
 /* On 64-bit hosts guest_base (guest.h) is defined by port/host64/guest_memory.c, which maps
    guest memory. */
@@ -41,9 +44,33 @@ unsigned host_exe_path(char *out, unsigned size)
 
 void host_exit(int code) { ExitProcess((UINT)code); }
 
-unsigned host_fp_csr(void) { return _mm_getcsr(); }
-void host_fp_set_csr(unsigned csr) { _mm_setcsr(csr); }
-uint64_t host_cycles(void) { return __rdtsc(); }
+unsigned host_fp_csr(void)
+{
+#if defined(_M_ARM64)
+    return host_arm64_fp_csr();
+#else
+    return _mm_getcsr();
+#endif
+}
+
+void host_fp_set_csr(unsigned csr)
+{
+#if defined(_M_ARM64)
+    host_arm64_fp_set_csr(csr);
+#else
+    _mm_setcsr(csr);
+#endif
+}
+
+uint64_t host_cycles(void)
+{
+#if defined(_M_ARM64)
+    LARGE_INTEGER count;
+    return QueryPerformanceCounter(&count) ? (uint64_t)count.QuadPart : 0;
+#else
+    return __rdtsc();
+#endif
+}
 
 void host_putenv(const char *text) { _putenv(text); }
 void host_putenv_s(const char *name, const char *value) { _putenv_s(name, value); }
@@ -134,7 +161,13 @@ uintptr_t host_heartbeat_eip(void)
     memset(&c, 0, sizeof c);
     c.ContextFlags = CONTEXT_CONTROL;
     if (SuspendThread(heartbeat_thread) != (DWORD)-1) {
-        if (GetThreadContext(heartbeat_thread, &c)) eip = (uintptr_t)c.Rip;
+        if (GetThreadContext(heartbeat_thread, &c)) {
+#if defined(_M_ARM64)
+            eip = (uintptr_t)c.Pc;
+#else
+            eip = (uintptr_t)c.Rip;
+#endif
+        }
         ResumeThread(heartbeat_thread);
     }
     return eip;
@@ -143,7 +176,7 @@ uintptr_t host_heartbeat_eip(void)
 /* ---- the system (host_os.h) ----
    ntdll's RtlGetVersion, since GetVersionEx says 6.2 to a program without a manifest; the release
    ("24H2") from the registry; Wine (Proton, for Linux and Mac players) by its wine_get_version;
-   the CPU's name from CPUID's brand string. */
+   the CPU's name from CPUID on x64 or Windows' processor registry entry on ARM64. */
 void host_os_system(char *out, unsigned size)
 {
     RTL_OSVERSIONINFOW v = {sizeof v};
@@ -159,10 +192,17 @@ void host_os_system(char *out, unsigned size)
     if (v.dwMajorVersion == 10) snprintf(windows, sizeof windows, "%s", v.dwBuildNumber >= 22000 ? "11" : "10");
     else snprintf(windows, sizeof windows, "%lu.%lu", v.dwMajorVersion, v.dwMinorVersion);
     if (wine_version) snprintf(wine, sizeof wine, " on Wine %s", wine_version());
+#if defined(_M_ARM64)
+    n = sizeof brand;
+    if (RegGetValueA(HKEY_LOCAL_MACHINE, "HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
+                     "ProcessorNameString", RRF_RT_REG_SZ, NULL, brand, &n) != ERROR_SUCCESS)
+        snprintf(brand, sizeof brand, "ARM64 processor");
+#else
     int r[4];
     __cpuid(r, 0x80000000);
     if ((unsigned)r[0] >= 0x80000004)
         for (int i = 0; i < 3; i++) __cpuid(r, 0x80000002 + i), memcpy(brand + 16 * i, r, 16);
+#endif
     while (*cpu == ' ') cpu++;
     for (size_t k = strlen(cpu); k && cpu[k - 1] == ' '; k--) cpu[k - 1] = 0;
     snprintf(out, size, "Windows %s%s%s (build %lu)%s, %s", windows, *release ? " " : "", release, v.dwBuildNumber, wine,

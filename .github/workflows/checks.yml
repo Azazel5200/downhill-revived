@@ -18,6 +18,37 @@ jobs:
         run: python tools/check_tree.py
       - name: docs linter (findings, citations, paths)
         run: python tools/check_docs.py
+  # Follow-up to the green ARM64 fiber lane: compile and *run* the Windows host's OS services.
+  # No licensed disc, renderer, WABT or local laptop needed; same source gets an x64 regression.
+  win-arm64-host-os-smoke:
+    if: github.event_name == 'pull_request' && github.head_ref == 'azazel/win-arm64-host-os'
+    runs-on: windows-11-vs2026-arm
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native ARM64 host OS compatibility and offline routing checks
+        shell: pwsh
+        env:
+          DHD_CI_ALLOW_C_OUTPUT: '1'
+        run: ./port/tools/ci_win_host_smoke.ps1 -Arch arm64
+      - name: Standalone Windows ARM64 host OS selftest (not the game)
+        uses: actions/upload-artifact@v4
+        with:
+          name: win-arm64-host-os-selftest-not-game
+          path: build/host-os-win-arm64/selftest_win_host.exe
+          if-no-files-found: error
+          retention-days: 7
+  win-x64-host-os-regression:
+    if: github.event_name == 'pull_request' && github.head_ref == 'azazel/win-arm64-host-os'
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native x64 regression of the same Windows host OS services
+        shell: pwsh
+        env:
+          DHD_CI_ALLOW_C_OUTPUT: '1'
+        run: ./port/tools/ci_win_host_smoke.ps1 -Arch x64
   # The draft Windows ARM64 lane uses a free hosted ARM64 runner to test its small native
   # fiber/guard executable. No game disc, licensed assets, SDL3, renderer or secrets required.
   arm64-fiber-smoke:
