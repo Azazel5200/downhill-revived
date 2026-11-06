@@ -59,6 +59,32 @@ jobs:
               [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2], 'Process')
             }
           }
+          # Some hosted images launch VsDevCmd without exporting the expected
+          # library metadata. Locate actual ARM64 directories rather than
+          # silently using the image's x64 defaults.
+          foreach ($key in @('VCToolsInstallDir', 'WindowsSdkDir', 'WindowsSDKVersion')) {
+            Write-Host ('VS developer variable {0}: {1}' -f $key, [bool][Environment]::GetEnvironmentVariable($key))
+          }
+          if (!$env:VCToolsInstallDir) {
+            $msvc = Get-ChildItem (Join-Path $vs 'VC/Tools/MSVC') -Directory -ErrorAction SilentlyContinue |
+              Where-Object { Test-Path (Join-Path $_.FullName 'lib/arm64') } |
+              Sort-Object Name -Descending | Select-Object -First 1
+            if (!$msvc) { throw 'MSVC ARM64 libraries are unavailable in this image' }
+            $env:VCToolsInstallDir = $msvc.FullName
+          }
+          if (!$env:WindowsSdkDir) {
+            $env:WindowsSdkDir = [Microsoft.Win32.Registry]::GetValue(
+              'HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows Kits\Installed Roots', 'KitsRoot10', $null)
+            if (!$env:WindowsSdkDir) { throw 'Windows SDK installation root is unavailable' }
+          }
+          if (!$env:WindowsSDKVersion) {
+            $sdkVersion = Get-ChildItem (Join-Path $env:WindowsSdkDir 'Lib') -Directory -ErrorAction SilentlyContinue |
+              Where-Object { (Test-Path (Join-Path $_.FullName 'ucrt/arm64')) -and
+                             (Test-Path (Join-Path $_.FullName 'um/arm64')) } |
+              Sort-Object Name -Descending | Select-Object -First 1
+            if (!$sdkVersion) { throw 'Windows SDK ARM64 libraries are unavailable' }
+            $env:WindowsSDKVersion = $sdkVersion.Name + '\'
+          }
           $clang = Get-Command clang-cl.exe -ErrorAction SilentlyContinue
           if ($clang) { $llvmBin = Split-Path $clang.Source }
           else {

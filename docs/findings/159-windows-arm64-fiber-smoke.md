@@ -82,6 +82,10 @@ this lane or claim ARM64 portability based only on Python tests.
   pass on the next run; that run then correctly rejected the hosted runner's C: output path.
   The CI-only exception above is under test; compilation and runtime validation are still
   pending, and neither failed run is evidence that the native switch works.
+- The hosted runner subsequently passed all five tests and its C: scope guard, but VsDevCmd
+  did not provide the three ARM64 MSVC/SDK environment variables to Python. The job now reports
+  their presence and can discover the installed ARM64 MSVC/SDK directories, rejecting x64-only
+  environments before compilation. This hosted-image setup is still being validated.
 
 ## Result
 
