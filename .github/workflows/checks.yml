@@ -102,6 +102,26 @@ jobs:
           path: build/arm64-renderer-staticlib.json
           if-no-files-found: error
           retention-days: 7
+  # Verify that the native ARM64 C host can resolve and call the Rust renderer's
+  # frozen C ABI. Asset-free, no GPU device, no ISO, and not a complete game.
+  win-arm64-rust-abi:
+    if: github.event_name == 'pull_request' && github.head_ref == 'azazel/win-arm64-rust-abi'
+    runs-on: windows-11-vs2026-arm
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native Windows ARM64 C to Rust staticlib link and call
+        shell: pwsh
+        env:
+          DHD_CI_ALLOW_C_OUTPUT: '1'
+        run: ./port/tools/ci_win_host_smoke.ps1 -Arch arm64 -RustAbi
+      - name: Standalone ARM64 C/Rust linker selftest (not the game)
+        uses: actions/upload-artifact@v4
+        with:
+          name: win-arm64-rust-abi-selftest-not-game
+          path: build/host-rustabi-winarm64/selftest_win_rust_abi.exe
+          if-no-files-found: error
+          retention-days: 7
   # The draft Windows ARM64 lane uses a free hosted ARM64 runner to test its small native
   # fiber/guard executable. No game disc, licensed assets, SDL3, renderer or secrets required.
   arm64-fiber-smoke:
