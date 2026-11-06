@@ -29,6 +29,8 @@ jobs:
       - name: Get WABT runtime headers (1.0.42)
         shell: pwsh
         run: |
+          Write-Host "Native runner architecture: $env:PROCESSOR_ARCHITECTURE"
+          if ($env:PROCESSOR_ARCHITECTURE -ne 'ARM64') { throw 'Expected a native ARM64 runner' }
           $src = Join-Path $env:GITHUB_WORKSPACE 'build/wabt-src'
           $dst = Join-Path $env:GITHUB_WORKSPACE 'build/wabt/include'
           git clone --depth 1 --branch 1.0.42 https://github.com/WebAssembly/wabt.git $src
