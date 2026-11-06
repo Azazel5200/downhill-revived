@@ -37,7 +37,9 @@ play. No original disc or user's laptop is needed.
   files, no GPU initialization and a self-contained log bridge.
 - [x] 2026-11-06: add native ARM64 compiler/linker routing and PE header check,
   limited to GitHub's hosted disposable ARM64 runner.
-- [ ] Run and diagnose native ARM64 C/Rust link and executable in GitHub Actions.
+- [x] 2026-11-06: native [CI run 42174405666](https://github.com/Azazel5200/downhill-revived/actions/runs/42174405666)
+  passed C compilation, C→Rust linking, PE machine verification and the
+  standalone ARM64 executable's two ABI checks.
 
 ## Decisions
 
@@ -62,6 +64,15 @@ play. No original disc or user's laptop is needed.
   directory, **not** a Rust compilation failure. Resolve the exact Cargo
   `windows_aarch64_msvc-0.52.6/lib` directory; do not copy or substitute an
   import archive from an x64 package.
+- Follow-up native [CI run 42174405666](https://github.com/Azazel5200/downhill-revived/actions/runs/42174405666)
+  succeeded. The exact Cargo import library path ended in
+  `windows_aarch64_msvc-0.52.6/lib` and its archive passed the ARM64 machine
+  check. `lld-link.exe /machine:arm64` linked the C object to the real Rust
+  renderer, and the resulting PE executable ran natively with exit 0:
+  `PASS: native ARM64 C -> Rust renderer ABI: dhd_render 1.0 wgpu 29.0.3
+  core 29.0.3 naga 29.0.3 (GPU not initialized)`.
+  The runner also confirmed **2,427** ARM64 COFF objects in the renderer
+  library. GitHub uploaded the standalone executable, **not the game**.
 
 ## References
 
@@ -71,5 +82,9 @@ play. No original disc or user's laptop is needed.
 
 ## Result
 
-Pending native C→Rust ARM64 executable link and call. The entire game remains
-unported until its host build and runtime testing pass.
+**Native Windows ARM64 C→Rust static library linking and a real ABI call passed.**
+This proves that a small C program can consume the renderer's ARM64 static
+library without x64 emulation. The entire game is **not** yet ported; it still
+requires the unified host build (wasm2c, SDL3, game runtime), followed by
+display, input, sound, state and performance tests. Keep this finding `in
+progress` while the stacked draft lane awaits integration.
