@@ -190,6 +190,7 @@ out of date). New findings: copy `TEMPLATE.md` to the next free number on the la
 | 159 | [Native Windows ARM64 EE fiber smoke target](159-windows-arm64-fiber-smoke.md) | in progress |  |
 | 160 | [Windows ARM64 host OS services smoke](160-windows-arm64-host-os.md) | in progress |  |
 | 161 | [Native Windows ARM64 SDL3 static build and startup smoke](161-windows-arm64-sdl3-smoke.md) | in progress |  |
+| 162 | [Windows ARM64 Rust/wgpu renderer compile preflight](162-windows-arm64-rust-renderer-check.md) | in progress |  |
 | 075 | no file: the portable-core plan was numbered 075 on its branch and merged as 081 | renumbered | see 081 |
 | 113 | no file: the delta-time clock work was numbered 113 on its branch; the mixer's VBLANK time is in 139 | renumbered | see 139 |
 <!-- index:end -->
