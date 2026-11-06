@@ -40,6 +40,10 @@ jobs:
           if (!(Test-Path (Join-Path $dst 'wasm-rt.h'))) { throw 'Missing WABT runtime header' }
       - name: Native Windows ARM64 fiber and both guard-fault checks
         shell: pwsh
+        # Only this hosted, disposable runner may build on its system drive.
+        # Local builds keep the off-C: protection.
+        env:
+          DHD_CI_ALLOW_C_OUTPUT: '1'
         run: |
           $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
           if (!(Test-Path $vswhere)) { throw 'vswhere.exe is unavailable' }

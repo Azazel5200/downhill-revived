@@ -57,6 +57,10 @@ this lane or claim ARM64 portability based only on Python tests.
   build, even when a developer shell happens to have them installed.
 - Run generated binaries, temporary files and logs under the explicit output directory; keep
   build/tool downloads off the system drive when that is the machine's policy.
+- The GitHub-hosted disposable runner has a C: checkout by default. A narrowly scoped CI-only
+  opt-in (`DHD_CI_ALLOW_C_OUTPUT=1` together with GitHub's hosted-runner markers) permits this
+  *fiber smoke test* to use that ephemeral system drive. Normal user builds still reject C:;
+  it never writes to the user's Windows laptop.
 
 ## Surprises
 
@@ -73,6 +77,11 @@ this lane or claim ARM64 portability based only on Python tests.
 - GitHub offers native Windows 11 ARM64 hosted runners for public repositories, including a
   Visual Studio 2026 image. This can catch compiler and runtime failures before involving a
   player's machine: https://github.blog/changelog/2026-08-20-windows-11-arm64-vs2026-image-generally-available/.
+- First hosted native ARM64 run reached Python tests and exposed a test's Unix-only assertion
+  (`/lib/arm64` against Windows backslash paths). Normalizing separators made all five tests
+  pass on the next run; that run then correctly rejected the hosted runner's C: output path.
+  The CI-only exception above is under test; compilation and runtime validation are still
+  pending, and neither failed run is evidence that the native switch works.
 
 ## Result
 

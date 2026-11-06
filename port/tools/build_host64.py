@@ -316,7 +316,14 @@ def main():
     wabt = (a.wabt or t.wabt).resolve()
     simde = a.simde or Path(os.environ.get('SIMDE_DIR') or t.simde or str(DEVCACHES / 'simde-src'))
     out = (a.out or ROOT / t.out).resolve()
-    if out.drive.upper() == 'C:' or str(out).startswith('/mnt/c/'):
+    # GitHub-hosted Windows runners have an ephemeral C: workspace. Only the
+    # ARM64 fiber CI smoke test may opt into that runner-local exception;
+    # ordinary builds (including the user's laptop) still reject C:.
+    hosted_ci_fiber = (a.fiber_test and t.key == 'win-arm64'
+                       and os.environ.get('GITHUB_ACTIONS') == 'true'
+                       and os.environ.get('RUNNER_ENVIRONMENT') == 'github-hosted'
+                       and os.environ.get('DHD_CI_ALLOW_C_OUTPUT') == '1')
+    if (out.drive.upper() == 'C:' or str(out).startswith('/mnt/c/')) and not hosted_ci_fiber:
         p.error('build output must stay off C:')
     work = out / 'work' if t.android else out  # Android: out holds the APK's libraries only
     scratch = work / 'tmp'
