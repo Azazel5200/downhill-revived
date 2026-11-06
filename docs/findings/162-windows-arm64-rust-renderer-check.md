@@ -18,9 +18,10 @@ Acceptance:
    passes, including architecture routing and local C: safety.
 2. Native hosted Windows 11 ARM64 runner installs the project-pinned Rust 1.97.1 toolchain
    with `aarch64-pc-windows-msvc`, fetches the locked dependency graph, then runs
-   `python -B port/tools/rustgs.py check --target aarch64-pc-windows-msvc`.
-3. The existing Windows host OS smoke runs first in the same runner without regression.
-4. Repository docs and never-commit checks pass.
+   `python -B port/tools/rustgs.py check --target aarch64-pc-windows-msvc`: **passed**.
+3. The existing Windows host OS smoke runs first in the same runner without regression:
+   **passed**.
+4. Repository docs and never-commit checks pass: **passed**.
 
 This is **only `cargo check`**. It does not produce the static library, link the executable,
 initialize a GPU device or validate game state, controller, audio or frame rates.
@@ -34,7 +35,11 @@ initialize a GPU device or validate game state, controller, audio or frame rates
 - [x] 2026-11-06: permit C: Rust cache/output only on GitHub-hosted disposable runners with
   explicit CI opt-in; preserve the off-C: rule for the user's machine.
 - [x] 2026-11-06: four ARM64 routing/safety tests and the docs/tree tier pass locally.
-- [ ] Native hosted compiler and pinned-dependency graph check.
+- [x] 2026-11-06: native hosted Windows ARM64
+  [CI run 42170091082](https://github.com/Azazel5200/downhill-revived/actions/runs/42170091082)
+  checked the locked native feature graph with Rust 1.97.1. The log shows `wgpu-types 29.0.3`,
+  `wgpu-naga-bridge 29.0.3`, `wgpu-core-deps-windows-linux-android 29.0.3` and `dhd_render`
+  all checked; `Finished release profile [optimized] target(s) in 1m 17s`.
 - [ ] Decide separately whether/how to build, validate and link the actual ARM64 static library.
 
 ## Decisions
@@ -59,6 +64,9 @@ initialize a GPU device or validate game state, controller, audio or frame rates
   `[net] offline = true`, and could not find the locked `log` crate in a fresh cache.
   The native host OS smoke had already passed. Limit the online override to `cargo fetch`;
   do not weaken the subsequent offline renderer check.
+- After fixing the initial fetch, the target-locked dependency graph and actual native renderer
+  `cargo check` passed on a real Windows ARM64 runner. This does not imply the staticlib linker
+  will work: link/archive output and asset-free library calls remain separate tests.
 - The wider `rustgs_selftest.py` cannot finish on the current Linux scratch executor: its
   existing x64 Windows release-build step refuses without the LLVM `llvm-ar` executable.
   This is not evidence of a Rust ARM64 compile failure; the native runner is required.
@@ -71,4 +79,6 @@ initialize a GPU device or validate game state, controller, audio or frame rates
 
 ## Result
 
-Pending native hosted ARM64 renderer check. Leave this finding `in progress`.
+The native ARM64 Rust/wgpu renderer's compile check passed. Keep this finding `in progress`
+until its stacked dependencies are integrated, and investigate the next stage (staticlib
+generation/validation and full game linkage) separately. No user laptop was required.
