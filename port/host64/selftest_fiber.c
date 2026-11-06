@@ -37,7 +37,7 @@ static int mode;  /* 1: --guest-guard, 2: --native-guard */
 static uint64_t fp_control(void) {
 #if defined(__x86_64__) || defined(_M_X64)
     return _mm_getcsr() & ~63u;  /* without the sticky exception flags */
-#elif defined(__aarch64__)
+#elif defined(__aarch64__) || defined(_M_ARM64)
     uint64_t f; __asm__ volatile("mrs %0, fpcr" : "=r"(f)); return f;
 #else
 #error Implement fp_control for this architecture
@@ -59,7 +59,7 @@ static NOINLINE void registers(unsigned id,HostFiber to) {
           y==f[8] && z==f[9]);
 }
 #ifdef _WIN32
-/* The TEB's stack bounds (fiber_win64.c) are the running stack's. */
+/* The TEB's stack bounds (fiber_win64.c / fiber_winarm64.c) are the running stack's. */
 static void stack_bounds(size_t size) {
     NT_TIB *tib=(NT_TIB *)NtCurrentTeb(); ULONG_PTR low,high; uintptr_t here=(uintptr_t)&tib;
     GetCurrentThreadStackLimits(&low,&high);

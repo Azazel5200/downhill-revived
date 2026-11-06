@@ -6,7 +6,7 @@ void host_fp_mode(int mode) {
        status like graphics_queue.c; VU callers restore their saved raw mode. */
     _mm_setcsr(mode==HOST_FP_EE ? (_mm_getcsr() & 63u) | 0xFFC0u : 0x1F80u);
 }
-#elif defined(__aarch64__)
+#elif defined(__aarch64__) || defined(_M_ARM64)
 /* Untested: FPCR.RMode=11 (RZ), FZ=1, exception enables clear.
    Arm tininess/NaN details still require device state-trace validation. */
 void host_fp_mode(int mode) {
