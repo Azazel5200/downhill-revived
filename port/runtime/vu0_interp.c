@@ -25,9 +25,10 @@
 #include <stddef.h>
 #include <string.h>
 #include <time.h>
-#if defined(__aarch64__)
-/* The Android build (finding 091): SIMDe maps these SSE calls to NEON, the same IEEE single
+#if defined(__aarch64__) || defined(_M_ARM64)
+/* ARM64 (finding 091): SIMDe maps these SSE calls to NEON, the same IEEE single
    operations (under FPCR instead of MXCSR). */
+#include <stdatomic.h> /* SIMDe's SSE fence uses atomic_thread_fence on ARM64. */
 #define SIMDE_ENABLE_NATIVE_ALIASES
 #include <simde/x86/sse2.h>
 #include <arm_neon.h>

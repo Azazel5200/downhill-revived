@@ -67,6 +67,12 @@ the actual game compiles, boots, runs at 60 fps or supports Spanish.
   Gate its registration alongside its x64-only definition. Also explicitly
   route ARM64 SIMD audio/VIF through SIMDe and ARM64 graphics-queue FP control
   through its native FPCR path, preserving all x64 branches.
+- [x] Third integrated attempt, run 42214851075: SDL3 compiled in 114.4 s,
+  Rust staticlib in 175.3 s; neither CONTEXT registers nor x64 watchpoint
+  registration failed again. The next compiler error was SIMDe 0.8.2's
+  `atomic_thread_fence` / `memory_order_seq_cst` undeclared in the Windows
+  ARM64 VIF compile. Include the C11 atomic definitions explicitly ahead of
+  SIMDe on the ARM64 VIF and VU paths. The next hosted build must verify it.
 - [ ] Hosted full synthetic ARM64 build succeeds.
 - [ ] Hosted headless synthetic/negative tests pass.
 - [ ] Real, unmodified European game core compiled and played on hardware

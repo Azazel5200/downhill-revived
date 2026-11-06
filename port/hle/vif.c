@@ -11,6 +11,7 @@
 #include "ps2asm.h"
 #if !defined(DHD_VIF0_ONLY) && (defined(__aarch64__) || defined(_M_ARM64))
 /* ARM64: SIMDe maps the WL=1 unpack's SSE2 integer calls to NEON. */
+#include <stdatomic.h> /* SIMDe's SSE fence uses atomic_thread_fence on ARM64. */
 #define SIMDE_ENABLE_NATIVE_ALIASES
 #include <simde/x86/sse2.h>
 #elif !defined(DHD_VIF0_ONLY)
