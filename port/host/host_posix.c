@@ -9,6 +9,7 @@
 #define _GNU_SOURCE /* readlink, sigaction, dladdr */
 #include "host_api.h"
 #include "host_os.h"
+#include "fp_arm64_csr.h"
 #include "../include/guest.h"
 
 #include <dlfcn.h>
@@ -94,18 +95,12 @@ void host_exit(int code)
    exception reads as masked (arm64 has no FP traps here). Writing the MXCSR bits into FPCR as they
    are (AND1) left RMode and FZ alone: VU1 on the vu thread (FPCR IEEE) then rounded to nearest with
    denormals, unlike the PS2 and the x64 build. */
-#if defined(__aarch64__)
-static const unsigned rc_to_rmode[4] = {0, 2, 1, 3}, rmode_to_rc[4] = {0, 2, 1, 3};
-#endif
-
 unsigned host_fp_csr(void)
 {
 #if defined(__x86_64__)
     return _mm_getcsr();
 #elif defined(__aarch64__)
-    uint64_t v;
-    __asm__ volatile("mrs %0, fpcr" : "=r"(v));
-    return 0x1F80u | rmode_to_rc[(v >> 22) & 3] << 13 | ((v >> 24) & 1 ? 0x8040u : 0);
+    return host_arm64_fp_csr();
 #endif
 }
 
@@ -114,9 +109,7 @@ void host_fp_set_csr(unsigned csr)
 #if defined(__x86_64__)
     _mm_setcsr(csr);
 #elif defined(__aarch64__)
-    uint64_t now, v = (uint64_t)rc_to_rmode[(csr >> 13) & 3] << 22 | (csr & 0x8040u ? 1ull << 24 : 0);
-    __asm__ volatile("mrs %0, fpcr" : "=r"(now));
-    if (now != v) __asm__ volatile("msr fpcr, %0\n\tisb" :: "r"(v) : "memory");
+    host_arm64_fp_set_csr(csr);
 #endif
 }
 
