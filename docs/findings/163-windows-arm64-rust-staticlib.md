@@ -41,9 +41,10 @@ measure frame rates. No user laptop or game disc is needed for this phase.
 - `rustgs.py` remains the only Cargo build path, including its fully offline
   dependency and ABI checks. `cargo fetch --locked` happens first on the ephemeral
   runner, exactly as in finding 162.
-- The provisional ARM64 allowed native system libraries mirror the known Windows
-  x64 list. Only the actual ARM64 `native-static-libs` output can justify adding
-  another library to this target-specific list.
+- The ARM64 allowed native library list began with the known Windows x64 system
+  libraries. The first native build emitted one additional name,
+  `windows.0.52.0.lib`, from the locked Windows crate graph. This exact name is
+  allowed **only** for ARM64; no blanket relaxation of the gate.
 - A separate COFF verifier examines member headers rather than attempting to run
   the graphics engine without a display. It checks bytes on disk and the wrapper's
   digest without loading the entire archive into memory.
@@ -52,7 +53,13 @@ measure frame rates. No user laptop or game disc is needed for this phase.
 
 ## Surprises
 
-None recorded yet. Build failures and their exact evidence belong here.
+- First native [CI run 42171855946](https://github.com/Azazel5200/downhill-revived/actions/runs/42171855946):
+  the host service smoke and full `cargo check` passed. `cargo rustc --crate-type
+  staticlib` then finished, and `rustgs` normalized **60** COFF `S_OBJNAME` records.
+  Its post-build gate refused exactly one new `native-static-libs` entry:
+  `windows.0.52.0.lib`. No compiler or CPU-architecture error was reported.
+  Add that exact, observed library to the target-specific allow-list and rerun;
+  the validator and final report were not reached on this attempt.
 
 ## References
 
