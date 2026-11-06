@@ -138,6 +138,19 @@ jobs:
         env:
           DHD_CI_ALLOW_C_OUTPUT: '1'
         run: ./port/tools/ci_win_host_smoke.ps1 -Arch arm64 -HostRouting
+  # Compile and run the *unified* Windows ARM64 host, SDL3 and Rust renderer
+  # against a synthetic WASM fixture. Neither a retail disc nor its core is used.
+  win-arm64-fake-host:
+    if: github.event_name == 'pull_request' && github.head_ref == 'azazel/win-arm64-fake-host'
+    runs-on: windows-11-vs2026-arm
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native Windows ARM64 synthetic integrated host build and run
+        shell: pwsh
+        env:
+          DHD_CI_ALLOW_C_OUTPUT: '1'
+        run: ./port/tools/ci_win_host_smoke.ps1 -Arch arm64 -FakeHost
   # The draft Windows ARM64 lane uses a free hosted ARM64 runner to test its small native
   # fiber/guard executable. No game disc, licensed assets, SDL3, renderer or secrets required.
   arm64-fiber-smoke:

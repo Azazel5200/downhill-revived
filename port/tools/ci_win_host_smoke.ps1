@@ -1,5 +1,5 @@
 # Native GitHub runner only: configure the target VS/SDK compiler and run the host OS smoke.
-param([ValidateSet('arm64', 'x64')][string]$Arch, [switch]$SDL3, [switch]$RustCheck, [switch]$RustBuild, [switch]$RustAbi, [switch]$HostRouting)
+param([ValidateSet('arm64', 'x64')][string]$Arch, [switch]$SDL3, [switch]$RustCheck, [switch]$RustBuild, [switch]$RustAbi, [switch]$HostRouting, [switch]$FakeHost)
 $ErrorActionPreference = 'Stop'
 $expected = if ($Arch -eq 'arm64') { 'ARM64' } else { 'AMD64' }
 if ($env:PROCESSOR_ARCHITECTURE -ne $expected) { throw "Expected native $expected runner" }
@@ -59,6 +59,11 @@ if ($HostRouting) {
     if ($LASTEXITCODE -ne 0) { throw 'Full game ARM64 host routing tests failed' }
     python -B -m unittest discover -s port/tools -p test_win_arm64_fiber_target.py -v
     if ($LASTEXITCODE -ne 0) { throw 'Native ARM64 fiber routing regression failed' }
+}
+if ($FakeHost) {
+    if ($Arch -ne 'arm64') { throw 'The asset-free integrated host lane must run on native ARM64 Windows' }
+    & (Join-Path $PSScriptRoot 'ci_win_arm64_fake_host.ps1') -LLVM $llvmBin
+    if ($LASTEXITCODE -ne 0) { throw 'Native ARM64 synthetic host compilation or runtime failed' }
 }
 if ($SDL3) {
     if ($Arch -ne 'arm64') { throw 'The SDL3 preflight is for native ARM64 only' }
