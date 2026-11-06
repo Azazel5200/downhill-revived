@@ -1,5 +1,5 @@
 # Native GitHub runner only: configure the target VS/SDK compiler and run the host OS smoke.
-param([ValidateSet('arm64', 'x64')][string]$Arch, [switch]$SDL3, [switch]$RustCheck, [switch]$RustBuild)
+param([ValidateSet('arm64', 'x64')][string]$Arch, [switch]$SDL3, [switch]$RustCheck, [switch]$RustBuild, [switch]$RustAbi)
 $ErrorActionPreference = 'Stop'
 $expected = if ($Arch -eq 'arm64') { 'ARM64' } else { 'AMD64' }
 if ($env:PROCESSOR_ARCHITECTURE -ne $expected) { throw "Expected native $expected runner" }
@@ -63,7 +63,7 @@ if ($SDL3) {
     python -B port/tools/build_win_sdl_smoke.py --llvm $llvmBin
     if ($LASTEXITCODE -ne 0) { throw 'Native Windows ARM64 SDL3 build or smoke failed' }
 }
-if ($RustCheck -or $RustBuild) {
+if ($RustCheck -or $RustBuild -or $RustAbi) {
     if ($Arch -ne 'arm64') { throw 'Rust ARM64 preflight must run natively' }
     $env:DHD_DEVCACHES = Join-Path $env:GITHUB_WORKSPACE 'build/development-cache'
     $env:CARGO_HOME = Join-Path $env:GITHUB_WORKSPACE 'build/cargo'
@@ -82,17 +82,26 @@ if ($RustCheck -or $RustBuild) {
     finally { Pop-Location }
     python -B -m unittest discover -s port/tools -p test_win_arm64_rust_target.py -v
     if ($LASTEXITCODE -ne 0) { throw 'Offline Windows ARM64 Rust routing tests failed' }
-    if ($RustBuild) {
+    if ($RustBuild -or $RustAbi) {
         python -B -m unittest discover -s port/tools -p test_arm64_coff.py -v
         if ($LASTEXITCODE -ne 0) { throw 'Offline ARM64 COFF parser tests failed' }
     }
+    if ($RustAbi) {
+        python -B -m unittest discover -s port/tools -p test_win_rust_abi.py -v
+        if ($LASTEXITCODE -ne 0) { throw 'Offline ARM64 PE/ABI routing tests failed' }
+    }
     python -B port/tools/rustgs.py check --target aarch64-pc-windows-msvc
     if ($LASTEXITCODE -ne 0) { throw 'Native Windows ARM64 Rust renderer check failed' }
-    if ($RustBuild) {
+    if ($RustBuild -or $RustAbi) {
         $report = Join-Path $env:GITHUB_WORKSPACE 'build/arm64-renderer-staticlib.json'
         python -B port/tools/rustgs.py build --target aarch64-pc-windows-msvc --no-cache --report $report
         if ($LASTEXITCODE -ne 0) { throw 'Native Windows ARM64 Rust staticlib build or artifact gates failed' }
         python -B port/tools/check_arm64_coff.py --report $report
         if ($LASTEXITCODE -ne 0) { throw 'Native Windows ARM64 COFF archive validation failed' }
+        if ($RustAbi) {
+            python -B port/tools/build_win_rust_abi_smoke.py --report $report --llvm $llvmBin `
+                --out (Join-Path $env:GITHUB_WORKSPACE 'build/host-rustabi-winarm64')
+            if ($LASTEXITCODE -ne 0) { throw 'Native Windows ARM64 C/Rust ABI link or runtime smoke failed' }
+        }
     }
 }
