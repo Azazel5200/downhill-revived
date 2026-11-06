@@ -42,7 +42,10 @@ this lane or claim ARM64 portability based only on Python tests.
 - [x] Compile/link the new adapter with native Windows ARM64 clang-cl on a hosted machine.
 - [x] Run the 150-switch core checks and both deliberate guard-fault cases on hosted ARM64.
 - [ ] Inspect and validate its ARM64 exception unwinding metadata and stack walk.
-- [ ] Resolve backtrace behavior and confirm the normal selftest's diagnostic exit code.
+- [x] Confirm the normal selftest exits with its intended diagnostic code (`3`) and not an
+  unexpected access violation after returning from the fiber stack.
+- [ ] Resolve Windows ARM64 stack-walk depth, or independently establish an appropriate
+  diagnostic alternative with equivalent stack-boundary safety.
 - [ ] Repeat final verification on the user's own Windows 11 ARM64 hardware.
 - [ ] Rerun the unchanged win-x64 fiber selftest and the full port tier in the correct environment.
 
@@ -139,10 +142,13 @@ this lane or claim ARM64 portability based only on Python tests.
   root context is restored in those measured respects. The apparent main-process access
   violation was the `r` reuse noted above, not evidence of corrupted CRT state. A new hosted
   run will report the correct original process exit status.
+- The corrected run reported **`selftest_fiber failed (3)`** for the normal process, precisely
+  the intended backtrace-diagnostic status. Both independent probe processes also returned 3,
+  and both guard children still faulted as expected. **No abnormal shutdown is observed**;
+  the only remaining failed selftest invariant is the short one-frame Windows ARM64 stack walk.
 
 ## Result
 
 ARM64 compiler/linker and the core 150-switch/guard behavior are now validated on GitHub's
-native hosted hardware. Stack-walk depth and the user's on-device test remain unresolved;
-the main-process diagnostic exit code needs confirmation after fixing the reporter. This
-draft is not a player-ready ARM64 executable; do not merge it yet.
+native hosted hardware; normal shutdown is verified. Stack-walk depth and the user's on-device
+test remain unresolved. This draft is not a player-ready ARM64 executable; do not merge it yet.
