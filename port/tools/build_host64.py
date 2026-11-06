@@ -123,13 +123,16 @@ def glue(t):
 
 def windows_arm64_paths(env):
     """Select an actual ARM64 MSVC/SDK environment, never silently substitute x64 libraries."""
+    # os.environ is case-insensitive on Windows, but dict(os.environ, ...) is
+    # case-sensitive and its environment keys may already be uppercased.
+    env_ci = {key.casefold(): value for key, value in env.items()}
     needed = ('VCToolsInstallDir', 'WindowsSdkDir', 'WindowsSDKVersion')
-    missing = [name for name in needed if not env.get(name)]
+    missing = [name for name in needed if not env_ci.get(name.casefold())]
     if missing:
         raise RuntimeError('Windows ARM64 fiber smoke requires an ARM64 VS developer shell: '
                            'missing ' + ', '.join(missing))
-    msvc, sdk = Path(env['VCToolsInstallDir']), Path(env['WindowsSdkDir'])
-    version = env['WindowsSDKVersion'].strip('\\/')
+    msvc, sdk = Path(env_ci['vctoolsinstalldir']), Path(env_ci['windowssdkdir'])
+    version = env_ci['windowssdkversion'].strip('\\/')
     paths = [msvc/'include', msvc/'lib/arm64',
              *[sdk/'Include'/version/x for x in ('ucrt', 'um', 'shared')],
              sdk/'Lib'/version/'ucrt/arm64', sdk/'Lib'/version/'um/arm64']

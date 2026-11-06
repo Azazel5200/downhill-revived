@@ -83,10 +83,12 @@ this lane or claim ARM64 portability based only on Python tests.
   The CI-only exception above is under test; compilation and runtime validation are still
   pending, and neither failed run is evidence that the native switch works.
 - The hosted runner subsequently passed all five tests and its C: scope guard, but VsDevCmd
-  provided the three ARM64 MSVC/SDK environment variables to PowerShell but not to the invoked
-  Python child (verified by .NET env checks). The job now exports through PowerShell's `Env:`
-  provider, diagnoses Python's own view and can discover missing ARM64 paths, rejecting x64-only
-  environments before compilation. This hosted-image setup is still being validated.
+  appeared to lose the MSVC/SDK variables in `windows_arm64_paths`. Direct diagnostics proved
+  PowerShell **and Python** both received all three variables. Root cause: Python's Windows
+  `os.environ` uppercases names, while the build passed `dict(os.environ, ...)` and then used
+  case-sensitive mixed-case lookups. ARM64 path discovery now handles environment variable
+  names case-insensitively, with a regression test for uppercased keys. Compilation is still
+  unverified until the next hosted run.
 
 ## Result
 

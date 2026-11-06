@@ -68,6 +68,11 @@ class WindowsArm64FiberTargetTests(unittest.TestCase):
             self.assertNotIn('/lib/x64', text)
             self.assertNotIn('ucrt/x64', text)
 
+            # Windows os.environ normalizes names to uppercase; a copied dict
+            # must preserve case-insensitive lookup for compiler discovery.
+            upper_env = {name.upper(): value for name, value in env.items()}
+            self.assertEqual(builder.windows_arm64_paths(upper_env), (msvc, sdk, version))
+
     def test_full_game_request_fails_closed(self):
         script = Path(builder.__file__).resolve()
         result = subprocess.run([sys.executable, '-B', str(script), '--target', 'win-arm64'],
