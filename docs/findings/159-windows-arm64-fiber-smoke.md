@@ -103,6 +103,11 @@ this lane or claim ARM64 portability based only on Python tests.
   probe now checks whether the ordinary root thread can produce a backtrace before switching,
   and, if not, whether `x29` and its parent point within its reported stack bounds. This
   distinguishes a general compiler/Windows tracing issue from a synthetic-fiber-only issue.
+- The probe showed the **root thread also returns one frame**, before any fiber switch. Its
+  current `x29` did not lie inside `GetCurrentThreadStackLimits`. The compiler option was
+  placed before `/O2`, which can override frame-pointer settings. Move the explicit option
+  after `/O2`, assert its order in the test, and print root `x29` and bounds on failure to
+  distinguish compiler layout from an incorrect Windows stack-bounds API interpretation.
 
 ## Result
 

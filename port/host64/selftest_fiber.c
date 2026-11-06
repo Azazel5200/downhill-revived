@@ -84,8 +84,9 @@ static NOINLINE void backtrace_ends(void) {
         GetCurrentThreadStackLimits(&low,&high);
         int fp_ok=fp>=low && fp+16<=high;
         uintptr_t parent=fp_ok?*(const uintptr_t *)fp:0;
-        fprintf(stderr,"Windows ARM64 backtrace returned %d frames; x29 in stack=%d; "
-                "parent x29 in stack=%d\n",n,fp_ok,parent>=low && parent<high);
+        fprintf(stderr,"Windows ARM64 backtrace returned %d frames; x29=%p, bounds=[%p,%p), "
+                "parent x29 in stack=%d\n",n,(void *)fp,(void *)low,(void *)high,
+                parent>=low && parent<high);
     }
 #endif
 #else
@@ -139,6 +140,7 @@ int main(int argc,char **argv) {
     wasm_rt_allocate_memory(&memory,32768,32770,false,65536);
 #if defined(_WIN32) && (defined(_M_ARM64) || defined(__aarch64__))
     fprintf(stderr,"Windows ARM64 root-thread backtrace probe\n");
+    stack_bounds(0);
     backtrace_ends();
 #endif
     host64_fiber_bind(&stack_pointer); root=host_fiber_main(); CHECK(root==65);

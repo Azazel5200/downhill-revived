@@ -63,6 +63,7 @@ class WindowsArm64FiberTargetTests(unittest.TestCase):
             self.assertIn('--target=aarch64-pc-windows-msvc', text)
             self.assertIn('-fuse-ld=lld', text)
             self.assertIn('-fno-omit-frame-pointer', text)
+            self.assertGreater(cmd.index('-fno-omit-frame-pointer'),cmd.index('/O2'))
             self.assertIn('/lib/arm64', text)
             self.assertIn('ucrt/arm64', text)
             self.assertIn('um/arm64', text)
